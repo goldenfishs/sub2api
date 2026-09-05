@@ -111,6 +111,30 @@ export default {
 
   // User Subscriptions Page
   userSubscriptions: {
+    advanceWeek: {
+      autoLabel: "Automatically start next week when quota runs out",
+      autoShortLabel: "Auto reset",
+      autoHint: "Resetting deducts the time left in this week.",
+      autoTitle: "Enable automatic time deduction?",
+      autoDescription: "When weekly quota is exhausted, the remaining time in that week is deducted from your subscription. Weekly usage resets and a new 7-day window starts without further confirmation.",
+      autoWarning: "This shortens your subscription and deducted time cannot be recovered. Automatic resets pause if daily/monthly quota is exhausted or no following period remains. If weekly quota is already exhausted, enabling this can trigger a reset immediately.",
+      autoConfirm: "Enable automatic reset",
+      autoEnabled: "Automatic weekly reset enabled",
+      autoDisabled: "Automatic weekly reset disabled",
+      autoFailed: "Could not save this setting. Please try again.",
+
+      "action": "Reset quota",
+      "title": "Reset weekly quota and shorten subscription",
+      "description": "Unused weekly quota will be forfeited. Weekly usage resets to zero and a new 7-day window starts when you confirm.",
+      "deduct": "Estimated time deducted",
+      "newExpiry": "Estimated new expiry",
+      "warning": "Daily and monthly usage remain unchanged. This cannot be undone. The exact deduction is the time left in the current week when you confirm.",
+      "confirm": "Deduct time and reset",
+      "duration": "{days}d {hours}h {minutes}m",
+      "unavailable": "Use some weekly quota first; a following period must remain",
+      "success": "New weekly window started and expiry updated",
+      "failed": "Cannot reset now. Refresh and try again. Weekly usage and a following subscription period are required."
+},
     title: 'My Subscriptions',
     description: 'View your subscription plans and usage',
     noActiveSubscriptions: 'No Active Subscriptions',

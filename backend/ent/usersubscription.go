@@ -33,6 +33,8 @@ type UserSubscription struct {
 	StartsAt time.Time `json:"starts_at,omitempty"`
 	// ExpiresAt holds the value of the "expires_at" field.
 	ExpiresAt time.Time `json:"expires_at,omitempty"`
+	// AutoAdvanceWeek holds the value of the "auto_advance_week" field.
+	AutoAdvanceWeek bool `json:"auto_advance_week,omitempty"`
 	// Status holds the value of the "status" field.
 	Status string `json:"status,omitempty"`
 	// DailyWindowStart holds the value of the "daily_window_start" field.
@@ -121,6 +123,8 @@ func (*UserSubscription) scanValues(columns []string) ([]any, error) {
 	values := make([]any, len(columns))
 	for i := range columns {
 		switch columns[i] {
+		case usersubscription.FieldAutoAdvanceWeek:
+			values[i] = new(sql.NullBool)
 		case usersubscription.FieldDailyUsageUsd, usersubscription.FieldWeeklyUsageUsd, usersubscription.FieldMonthlyUsageUsd:
 			values[i] = new(sql.NullFloat64)
 		case usersubscription.FieldID, usersubscription.FieldUserID, usersubscription.FieldGroupID, usersubscription.FieldAssignedBy:
@@ -192,6 +196,12 @@ func (_m *UserSubscription) assignValues(columns []string, values []any) error {
 				return fmt.Errorf("unexpected type %T for field expires_at", values[i])
 			} else if value.Valid {
 				_m.ExpiresAt = value.Time
+			}
+		case usersubscription.FieldAutoAdvanceWeek:
+			if value, ok := values[i].(*sql.NullBool); !ok {
+				return fmt.Errorf("unexpected type %T for field auto_advance_week", values[i])
+			} else if value.Valid {
+				_m.AutoAdvanceWeek = value.Bool
 			}
 		case usersubscription.FieldStatus:
 			if value, ok := values[i].(*sql.NullString); !ok {
@@ -336,6 +346,9 @@ func (_m *UserSubscription) String() string {
 	builder.WriteString(", ")
 	builder.WriteString("expires_at=")
 	builder.WriteString(_m.ExpiresAt.Format(time.ANSIC))
+	builder.WriteString(", ")
+	builder.WriteString("auto_advance_week=")
+	builder.WriteString(fmt.Sprintf("%v", _m.AutoAdvanceWeek))
 	builder.WriteString(", ")
 	builder.WriteString("status=")
 	builder.WriteString(_m.Status)

@@ -55,8 +55,10 @@ type SubscriptionService struct {
 	subCacheTTL    time.Duration
 	subCacheJitter int // 抖动百分比
 
-	maintenanceQueue *SubscriptionMaintenanceQueue
-	now              func() time.Time
+	maintenanceQueue  *SubscriptionMaintenanceQueue
+	now               func() time.Time
+	autoAdvanceCancel context.CancelFunc
+	autoAdvanceDone   chan struct{}
 }
 
 // NewSubscriptionService 创建订阅服务
@@ -71,6 +73,7 @@ func NewSubscriptionService(groupRepo GroupRepository, userSubRepo UserSubscript
 	svc.initSubCache(cfg)
 	svc.initMaintenanceQueue(cfg)
 	svc.StartSubCacheInvalidationSubscriber(context.Background())
+	svc.startAutoAdvanceWeek()
 	return svc
 }
 
@@ -89,6 +92,10 @@ func (s *SubscriptionService) initMaintenanceQueue(cfg *config.Config) {
 func (s *SubscriptionService) Stop() {
 	if s == nil {
 		return
+	}
+	if s.autoAdvanceCancel != nil {
+		s.autoAdvanceCancel()
+		<-s.autoAdvanceDone
 	}
 	if s.maintenanceQueue != nil {
 		s.maintenanceQueue.Stop()
@@ -963,6 +970,15 @@ func (s *SubscriptionService) EnsureWindowMaintenance(ctx context.Context, sub *
 	if err != nil {
 		return nil, err
 	}
+	if refreshed.AutoAdvanceWeek && refreshed.WeeklyWindowStart != nil {
+		if err := s.tryAutoAdvanceWeek(ctx, refreshed); err != nil {
+			return nil, err
+		}
+		refreshed, err = s.userSubRepo.GetByID(ctx, sub.ID)
+		if err != nil {
+			return nil, err
+		}
+	}
 	s.InvalidateSubCacheSync(sub.UserID, sub.GroupID)
 	return refreshed, nil
 }
@@ -1016,12 +1032,16 @@ func (s *SubscriptionService) ValidateAndCheckLimits(sub *UserSubscription, grou
 		needsMaintenance = true
 	}
 
+	if canAutoAdvanceWeek(sub, group, now) {
+		needsMaintenance = true
+	}
+
 	// 3. 检查用量限额
 	if !sub.CheckDailyLimit(group, 0) {
 		return needsMaintenance, ErrDailyLimitExceeded
 	}
 	if !sub.CheckWeeklyLimit(group, 0) {
-		return needsMaintenance, ErrWeeklyLimitExceeded
+		return needsMaintenance || sub.AutoAdvanceWeek, ErrWeeklyLimitExceeded
 	}
 	if !sub.CheckMonthlyLimit(group, 0) {
 		return needsMaintenance, ErrMonthlyLimitExceeded

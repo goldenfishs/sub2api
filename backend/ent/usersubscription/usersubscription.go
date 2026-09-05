@@ -29,6 +29,8 @@ const (
 	FieldStartsAt = "starts_at"
 	// FieldExpiresAt holds the string denoting the expires_at field in the database.
 	FieldExpiresAt = "expires_at"
+	// FieldAutoAdvanceWeek holds the string denoting the auto_advance_week field in the database.
+	FieldAutoAdvanceWeek = "auto_advance_week"
 	// FieldStatus holds the string denoting the status field in the database.
 	FieldStatus = "status"
 	// FieldDailyWindowStart holds the string denoting the daily_window_start field in the database.
@@ -99,6 +101,7 @@ var Columns = []string{
 	FieldGroupID,
 	FieldStartsAt,
 	FieldExpiresAt,
+	FieldAutoAdvanceWeek,
 	FieldStatus,
 	FieldDailyWindowStart,
 	FieldWeeklyWindowStart,
@@ -135,6 +138,8 @@ var (
 	DefaultUpdatedAt func() time.Time
 	// UpdateDefaultUpdatedAt holds the default value on update for the "updated_at" field.
 	UpdateDefaultUpdatedAt func() time.Time
+	// DefaultAutoAdvanceWeek holds the default value on creation for the "auto_advance_week" field.
+	DefaultAutoAdvanceWeek bool
 	// DefaultStatus holds the default value on creation for the "status" field.
 	DefaultStatus string
 	// StatusValidator is a validator for the "status" field. It is called by the builders before save.
@@ -190,6 +195,11 @@ func ByStartsAt(opts ...sql.OrderTermOption) OrderOption {
 // ByExpiresAt orders the results by the expires_at field.
 func ByExpiresAt(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldExpiresAt, opts...).ToFunc()
+}
+
+// ByAutoAdvanceWeek orders the results by the auto_advance_week field.
+func ByAutoAdvanceWeek(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldAutoAdvanceWeek, opts...).ToFunc()
 }
 
 // ByStatus orders the results by the status field.

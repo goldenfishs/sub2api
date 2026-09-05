@@ -74,3 +74,26 @@ export default {
   getSubscriptionSummary,
   getSubscriptionProgress
 }
+
+export interface WeeklyAdvancePreview {
+  subscription_id: number
+  weekly_window_start: string
+  expires_at: string
+  new_expires_at: string
+  deduct_seconds: number
+}
+
+export async function previewAdvanceWeek(id: number): Promise<WeeklyAdvancePreview> {
+  return (await apiClient.get<WeeklyAdvancePreview>(`/subscriptions/${id}/advance-week`)).data
+}
+
+export async function advanceWeek(preview: WeeklyAdvancePreview): Promise<WeeklyAdvancePreview> {
+  return (await apiClient.post<WeeklyAdvancePreview>(`/subscriptions/${preview.subscription_id}/advance-week`, {
+    weekly_window_start: preview.weekly_window_start,
+    expires_at: preview.expires_at
+  })).data
+}
+
+export async function setAutoAdvanceWeek(id: number, enabled: boolean): Promise<UserSubscription> {
+  return (await apiClient.put<UserSubscription>(`/subscriptions/${id}/auto-advance-week`, { enabled })).data
+}

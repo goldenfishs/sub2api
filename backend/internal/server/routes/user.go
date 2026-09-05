@@ -133,6 +133,9 @@ func RegisterUserRoutes(
 			subscriptions.GET("/active", h.Subscription.GetActive)
 			subscriptions.GET("/progress", h.Subscription.GetProgress)
 			subscriptions.GET("/summary", h.Subscription.GetSummary)
+			subscriptions.GET("/:id/advance-week", h.Subscription.PreviewAdvanceWeek)
+			subscriptions.POST("/:id/advance-week", h.Subscription.AdvanceWeek)
+			subscriptions.PUT("/:id/auto-advance-week", h.Subscription.SetAutoAdvanceWeek)
 		}
 
 		// 渠道监控（用户只读）

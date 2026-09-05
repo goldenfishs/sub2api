@@ -90,6 +90,11 @@ func ExpiresAt(v time.Time) predicate.UserSubscription {
 	return predicate.UserSubscription(sql.FieldEQ(FieldExpiresAt, v))
 }
 
+// AutoAdvanceWeek applies equality check predicate on the "auto_advance_week" field. It's identical to AutoAdvanceWeekEQ.
+func AutoAdvanceWeek(v bool) predicate.UserSubscription {
+	return predicate.UserSubscription(sql.FieldEQ(FieldAutoAdvanceWeek, v))
+}
+
 // Status applies equality check predicate on the "status" field. It's identical to StatusEQ.
 func Status(v string) predicate.UserSubscription {
 	return predicate.UserSubscription(sql.FieldEQ(FieldStatus, v))
@@ -388,6 +393,16 @@ func ExpiresAtLT(v time.Time) predicate.UserSubscription {
 // ExpiresAtLTE applies the LTE predicate on the "expires_at" field.
 func ExpiresAtLTE(v time.Time) predicate.UserSubscription {
 	return predicate.UserSubscription(sql.FieldLTE(FieldExpiresAt, v))
+}
+
+// AutoAdvanceWeekEQ applies the EQ predicate on the "auto_advance_week" field.
+func AutoAdvanceWeekEQ(v bool) predicate.UserSubscription {
+	return predicate.UserSubscription(sql.FieldEQ(FieldAutoAdvanceWeek, v))
+}
+
+// AutoAdvanceWeekNEQ applies the NEQ predicate on the "auto_advance_week" field.
+func AutoAdvanceWeekNEQ(v bool) predicate.UserSubscription {
+	return predicate.UserSubscription(sql.FieldNEQ(FieldAutoAdvanceWeek, v))
 }
 
 // StatusEQ applies the EQ predicate on the "status" field.
