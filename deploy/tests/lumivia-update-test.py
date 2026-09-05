@@ -15,6 +15,9 @@ case "$*" in
   "compose ps -q sub2api") echo app ;;
   "compose ps -q postgres") echo db ;;
   "commit "*) echo snapshot ;;
+  "image inspect "*"org.opencontainers.image.source"*) echo https://github.com/goldenfishs/sub2api ;;
+  "image inspect "*"org.opencontainers.image.revision"*)
+    if [[ "${FAIL_AT:-}" == revision ]]; then echo wrong; else printf '%040d\n' 0 | tr 0 a; fi ;;
   "exec db sh -c "*) [[ "${FAIL_AT:-}" != backup ]] && echo dump ;;
   "inspect "*)
     if [[ "${FAIL_AT:-}" == health ]]; then echo unhealthy; else echo healthy; fi ;;
@@ -58,6 +61,10 @@ class DeploymentTests(unittest.TestCase):
 
     def test_failed_pull_does_not_stop_application(self):
         self.assertNotEqual(self.run_update(fail="pull").returncode, 0)
+        self.assertNotIn("compose stop", self.calls.read_text())
+
+    def test_wrong_revision_does_not_stop_application(self):
+        self.assertNotEqual(self.run_update(fail="revision").returncode, 0)
         self.assertNotIn("compose stop", self.calls.read_text())
 
     def test_backup_failure_restores_current_container_snapshot(self):

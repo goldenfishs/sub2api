@@ -3,7 +3,8 @@
 set -euo pipefail
 umask 077
 
-image=${1:?Usage: sudo bash lumivia-update.sh ghcr.io/goldenfishs/sub2api:sha-<40-character-commit>}
+image=${1:?Usage: sudo bash lumivia-update.sh ghcr.io/goldenfishs/sub2api:sha-<40-character-commit> [image-archive.tar.gz]}
+archive=${2:-}
 if [[ ! "$image" =~ ^ghcr\.io/goldenfishs/sub2api(:sha-[0-9a-f]{40}|@sha256:[0-9a-f]{64})$ ]]; then
   echo 'Only a pinned Lumivia fork image is accepted.' >&2
   exit 1
@@ -20,7 +21,18 @@ docker compose config --quiet
 app=$(docker compose ps -q sub2api)
 db=$(docker compose ps -q postgres)
 [[ -n "$app" && -n "$db" ]] || { echo 'Application and database must be running.' >&2; exit 1; }
-docker pull "$image"
+if [[ -n "$archive" ]]; then
+  [[ -f "$archive" ]] || { echo 'Image archive not found.' >&2; exit 1; }
+  docker load -i "$archive"
+else
+  docker pull "$image"
+fi
+source=$(docker image inspect --format '{{index .Config.Labels "org.opencontainers.image.source"}}' "$image")
+[[ "$source" == https://github.com/goldenfishs/sub2api ]] || { echo 'Image source is not the Lumivia fork.' >&2; exit 1; }
+if [[ "$image" == *:sha-* ]]; then
+  revision=$(docker image inspect --format '{{index .Config.Labels "org.opencontainers.image.revision"}}' "$image")
+  [[ "$revision" == "${image##*:sha-}" ]] || { echo 'Image revision does not match the requested commit.' >&2; exit 1; }
+fi
 docker run --rm --entrypoint /app/sub2api "$image" -version
 
 stamp=$(date -u +%Y%m%dT%H%M%SZ)

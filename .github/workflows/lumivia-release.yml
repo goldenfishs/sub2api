@@ -85,3 +85,19 @@ jobs:
             org.opencontainers.image.revision=${{ github.sha }}
           cache-from: type=gha,scope=lumivia-amd64
           cache-to: type=gha,mode=max,scope=lumivia-amd64
+      - name: Export deployable image archive
+        env:
+          IMAGE: ghcr.io/goldenfishs/sub2api:sha-${{ github.sha }}
+        run: |
+          docker pull "$IMAGE"
+          docker save "$IMAGE" | gzip > /tmp/lumivia-image.tar.gz
+          cd /tmp
+          sha256sum lumivia-image.tar.gz > lumivia-image.tar.gz.sha256
+      - uses: actions/upload-artifact@v7
+        with:
+          name: lumivia-image-${{ github.sha }}
+          path: |
+            /tmp/lumivia-image.tar.gz
+            /tmp/lumivia-image.tar.gz.sha256
+          compression-level: 0
+          retention-days: 30
