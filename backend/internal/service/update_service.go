@@ -31,7 +31,7 @@ const (
 	updateCacheKey = "update_check_cache"
 	updateCacheTTL = 1200 // 20 minutes
 	// Lumivia releases must retain the fork's subscription customizations.
-	githubRepo     = "goldenfishs/sub2api"
+	githubRepo = "goldenfishs/sub2api"
 
 	// Security: allowed download domains for updates
 	allowedDownloadHost = "github.com"

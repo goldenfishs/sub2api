@@ -36,6 +36,7 @@ jobs:
           grep -q '^TestWeeklyAdvanceAutomaticRechecksStoredOptIn$' <<< "$tests"
           grep -q '^TestLumiviaUpdatesUseFork$' <<< "$tests"
           go test -tags=unit ./internal/service -run 'TestWeeklyAdvance|TestValidateAndCheckLimits|TestLumivia|TestUpdateService' -count=1
+          go test -tags=unit ./internal/server -run '^TestAPIContracts$' -count=1
       - uses: pnpm/action-setup@v6
         with:
           version: 9
