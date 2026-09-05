@@ -113,6 +113,20 @@ func (_u *UserSubscriptionUpdate) SetNillableExpiresAt(v *time.Time) *UserSubscr
 	return _u
 }
 
+// SetAutoAdvanceWeek sets the "auto_advance_week" field.
+func (_u *UserSubscriptionUpdate) SetAutoAdvanceWeek(v bool) *UserSubscriptionUpdate {
+	_u.mutation.SetAutoAdvanceWeek(v)
+	return _u
+}
+
+// SetNillableAutoAdvanceWeek sets the "auto_advance_week" field if the given value is not nil.
+func (_u *UserSubscriptionUpdate) SetNillableAutoAdvanceWeek(v *bool) *UserSubscriptionUpdate {
+	if v != nil {
+		_u.SetAutoAdvanceWeek(*v)
+	}
+	return _u
+}
+
 // SetStatus sets the "status" field.
 func (_u *UserSubscriptionUpdate) SetStatus(v string) *UserSubscriptionUpdate {
 	_u.mutation.SetStatus(v)
@@ -477,6 +491,9 @@ func (_u *UserSubscriptionUpdate) sqlSave(ctx context.Context) (_node int, err e
 	if value, ok := _u.mutation.ExpiresAt(); ok {
 		_spec.SetField(usersubscription.FieldExpiresAt, field.TypeTime, value)
 	}
+	if value, ok := _u.mutation.AutoAdvanceWeek(); ok {
+		_spec.SetField(usersubscription.FieldAutoAdvanceWeek, field.TypeBool, value)
+	}
 	if value, ok := _u.mutation.Status(); ok {
 		_spec.SetField(usersubscription.FieldStatus, field.TypeString, value)
 	}
@@ -755,6 +772,20 @@ func (_u *UserSubscriptionUpdateOne) SetExpiresAt(v time.Time) *UserSubscription
 func (_u *UserSubscriptionUpdateOne) SetNillableExpiresAt(v *time.Time) *UserSubscriptionUpdateOne {
 	if v != nil {
 		_u.SetExpiresAt(*v)
+	}
+	return _u
+}
+
+// SetAutoAdvanceWeek sets the "auto_advance_week" field.
+func (_u *UserSubscriptionUpdateOne) SetAutoAdvanceWeek(v bool) *UserSubscriptionUpdateOne {
+	_u.mutation.SetAutoAdvanceWeek(v)
+	return _u
+}
+
+// SetNillableAutoAdvanceWeek sets the "auto_advance_week" field if the given value is not nil.
+func (_u *UserSubscriptionUpdateOne) SetNillableAutoAdvanceWeek(v *bool) *UserSubscriptionUpdateOne {
+	if v != nil {
+		_u.SetAutoAdvanceWeek(*v)
 	}
 	return _u
 }
@@ -1152,6 +1183,9 @@ func (_u *UserSubscriptionUpdateOne) sqlSave(ctx context.Context) (_node *UserSu
 	}
 	if value, ok := _u.mutation.ExpiresAt(); ok {
 		_spec.SetField(usersubscription.FieldExpiresAt, field.TypeTime, value)
+	}
+	if value, ok := _u.mutation.AutoAdvanceWeek(); ok {
+		_spec.SetField(usersubscription.FieldAutoAdvanceWeek, field.TypeBool, value)
 	}
 	if value, ok := _u.mutation.Status(); ok {
 		_spec.SetField(usersubscription.FieldStatus, field.TypeString, value)

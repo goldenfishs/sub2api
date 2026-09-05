@@ -2032,6 +2032,7 @@ export interface ChangePasswordRequest {
 // ==================== User Subscription Types ====================
 
 export interface UserSubscription {
+  auto_advance_week?: boolean
   id: number
   user_id: number
   group_id: number

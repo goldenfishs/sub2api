@@ -13,9 +13,10 @@ type UserSubscription struct {
 	UserID  int64
 	GroupID int64
 
-	StartsAt  time.Time
-	ExpiresAt time.Time
-	Status    string
+	StartsAt        time.Time
+	ExpiresAt       time.Time
+	Status          string
+	AutoAdvanceWeek bool
 
 	DailyWindowStart   *time.Time
 	WeeklyWindowStart  *time.Time

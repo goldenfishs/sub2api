@@ -893,6 +893,7 @@ func userSubscriptionFromServiceBase(sub *service.UserSubscription) UserSubscrip
 		MonthlyWindowStart: sub.MonthlyWindowStart,
 		DailyUsageUSD:      sub.DailyUsageUSD,
 		WeeklyUsageUSD:     sub.WeeklyUsageUSD,
+		AutoAdvanceWeek:    sub.AutoAdvanceWeek,
 		MonthlyUsageUSD:    sub.MonthlyUsageUSD,
 		CreatedAt:          sub.CreatedAt,
 		UpdatedAt:          sub.UpdatedAt,

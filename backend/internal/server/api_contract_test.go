@@ -444,6 +444,7 @@ func TestAPIContracts(t *testing.T) {
 						"monthly_window_start": null,
 						"daily_usage_usd": 1.23,
 						"weekly_usage_usd": 2.34,
+						"auto_advance_week": false,
 						"monthly_usage_usd": 3.45,
 						"created_at": "2025-01-02T03:04:05Z",
 						"updated_at": "2025-01-02T03:04:05Z"

@@ -760,6 +760,7 @@ type UserSubscription struct {
 
 	DailyUsageUSD   float64 `json:"daily_usage_usd"`
 	WeeklyUsageUSD  float64 `json:"weekly_usage_usd"`
+	AutoAdvanceWeek bool    `json:"auto_advance_week"`
 	MonthlyUsageUSD float64 `json:"monthly_usage_usd"`
 
 	CreatedAt time.Time  `json:"created_at"`

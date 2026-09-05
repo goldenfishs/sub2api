@@ -55290,6 +55290,7 @@ type UserSubscriptionMutation struct {
 	deleted_at              *time.Time
 	starts_at               *time.Time
 	expires_at              *time.Time
+	auto_advance_week       *bool
 	status                  *string
 	daily_window_start      *time.Time
 	weekly_window_start     *time.Time
@@ -55678,6 +55679,42 @@ func (m *UserSubscriptionMutation) OldExpiresAt(ctx context.Context) (v time.Tim
 // ResetExpiresAt resets all changes to the "expires_at" field.
 func (m *UserSubscriptionMutation) ResetExpiresAt() {
 	m.expires_at = nil
+}
+
+// SetAutoAdvanceWeek sets the "auto_advance_week" field.
+func (m *UserSubscriptionMutation) SetAutoAdvanceWeek(b bool) {
+	m.auto_advance_week = &b
+}
+
+// AutoAdvanceWeek returns the value of the "auto_advance_week" field in the mutation.
+func (m *UserSubscriptionMutation) AutoAdvanceWeek() (r bool, exists bool) {
+	v := m.auto_advance_week
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldAutoAdvanceWeek returns the old "auto_advance_week" field's value of the UserSubscription entity.
+// If the UserSubscription object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *UserSubscriptionMutation) OldAutoAdvanceWeek(ctx context.Context) (v bool, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldAutoAdvanceWeek is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldAutoAdvanceWeek requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldAutoAdvanceWeek: %w", err)
+	}
+	return oldValue.AutoAdvanceWeek, nil
+}
+
+// ResetAutoAdvanceWeek resets all changes to the "auto_advance_week" field.
+func (m *UserSubscriptionMutation) ResetAutoAdvanceWeek() {
+	m.auto_advance_week = nil
 }
 
 // SetStatus sets the "status" field.
@@ -56347,7 +56384,7 @@ func (m *UserSubscriptionMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *UserSubscriptionMutation) Fields() []string {
-	fields := make([]string, 0, 17)
+	fields := make([]string, 0, 18)
 	if m.created_at != nil {
 		fields = append(fields, usersubscription.FieldCreatedAt)
 	}
@@ -56368,6 +56405,9 @@ func (m *UserSubscriptionMutation) Fields() []string {
 	}
 	if m.expires_at != nil {
 		fields = append(fields, usersubscription.FieldExpiresAt)
+	}
+	if m.auto_advance_week != nil {
+		fields = append(fields, usersubscription.FieldAutoAdvanceWeek)
 	}
 	if m.status != nil {
 		fields = append(fields, usersubscription.FieldStatus)
@@ -56421,6 +56461,8 @@ func (m *UserSubscriptionMutation) Field(name string) (ent.Value, bool) {
 		return m.StartsAt()
 	case usersubscription.FieldExpiresAt:
 		return m.ExpiresAt()
+	case usersubscription.FieldAutoAdvanceWeek:
+		return m.AutoAdvanceWeek()
 	case usersubscription.FieldStatus:
 		return m.Status()
 	case usersubscription.FieldDailyWindowStart:
@@ -56464,6 +56506,8 @@ func (m *UserSubscriptionMutation) OldField(ctx context.Context, name string) (e
 		return m.OldStartsAt(ctx)
 	case usersubscription.FieldExpiresAt:
 		return m.OldExpiresAt(ctx)
+	case usersubscription.FieldAutoAdvanceWeek:
+		return m.OldAutoAdvanceWeek(ctx)
 	case usersubscription.FieldStatus:
 		return m.OldStatus(ctx)
 	case usersubscription.FieldDailyWindowStart:
@@ -56541,6 +56585,13 @@ func (m *UserSubscriptionMutation) SetField(name string, value ent.Value) error 
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.SetExpiresAt(v)
+		return nil
+	case usersubscription.FieldAutoAdvanceWeek:
+		v, ok := value.(bool)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetAutoAdvanceWeek(v)
 		return nil
 	case usersubscription.FieldStatus:
 		v, ok := value.(string)
@@ -56759,6 +56810,9 @@ func (m *UserSubscriptionMutation) ResetField(name string) error {
 		return nil
 	case usersubscription.FieldExpiresAt:
 		m.ResetExpiresAt()
+		return nil
+	case usersubscription.FieldAutoAdvanceWeek:
+		m.ResetAutoAdvanceWeek()
 		return nil
 	case usersubscription.FieldStatus:
 		m.ResetStatus()

@@ -42,6 +42,7 @@ func (UserSubscription) Fields() []ent.Field {
 			SchemaType(map[string]string{dialect.Postgres: "timestamptz"}),
 		field.Time("expires_at").
 			SchemaType(map[string]string{dialect.Postgres: "timestamptz"}),
+		field.Bool("auto_advance_week").Default(false),
 		field.String("status").
 			MaxLen(20).
 			Default(domain.SubscriptionStatusActive),

@@ -91,6 +91,20 @@ func (_c *UserSubscriptionCreate) SetExpiresAt(v time.Time) *UserSubscriptionCre
 	return _c
 }
 
+// SetAutoAdvanceWeek sets the "auto_advance_week" field.
+func (_c *UserSubscriptionCreate) SetAutoAdvanceWeek(v bool) *UserSubscriptionCreate {
+	_c.mutation.SetAutoAdvanceWeek(v)
+	return _c
+}
+
+// SetNillableAutoAdvanceWeek sets the "auto_advance_week" field if the given value is not nil.
+func (_c *UserSubscriptionCreate) SetNillableAutoAdvanceWeek(v *bool) *UserSubscriptionCreate {
+	if v != nil {
+		_c.SetAutoAdvanceWeek(*v)
+	}
+	return _c
+}
+
 // SetStatus sets the "status" field.
 func (_c *UserSubscriptionCreate) SetStatus(v string) *UserSubscriptionCreate {
 	_c.mutation.SetStatus(v)
@@ -326,6 +340,10 @@ func (_c *UserSubscriptionCreate) defaults() error {
 		v := usersubscription.DefaultUpdatedAt()
 		_c.mutation.SetUpdatedAt(v)
 	}
+	if _, ok := _c.mutation.AutoAdvanceWeek(); !ok {
+		v := usersubscription.DefaultAutoAdvanceWeek
+		_c.mutation.SetAutoAdvanceWeek(v)
+	}
 	if _, ok := _c.mutation.Status(); !ok {
 		v := usersubscription.DefaultStatus
 		_c.mutation.SetStatus(v)
@@ -371,6 +389,9 @@ func (_c *UserSubscriptionCreate) check() error {
 	}
 	if _, ok := _c.mutation.ExpiresAt(); !ok {
 		return &ValidationError{Name: "expires_at", err: errors.New(`ent: missing required field "UserSubscription.expires_at"`)}
+	}
+	if _, ok := _c.mutation.AutoAdvanceWeek(); !ok {
+		return &ValidationError{Name: "auto_advance_week", err: errors.New(`ent: missing required field "UserSubscription.auto_advance_week"`)}
 	}
 	if _, ok := _c.mutation.Status(); !ok {
 		return &ValidationError{Name: "status", err: errors.New(`ent: missing required field "UserSubscription.status"`)}
@@ -444,6 +465,10 @@ func (_c *UserSubscriptionCreate) createSpec() (*UserSubscription, *sqlgraph.Cre
 	if value, ok := _c.mutation.ExpiresAt(); ok {
 		_spec.SetField(usersubscription.FieldExpiresAt, field.TypeTime, value)
 		_node.ExpiresAt = value
+	}
+	if value, ok := _c.mutation.AutoAdvanceWeek(); ok {
+		_spec.SetField(usersubscription.FieldAutoAdvanceWeek, field.TypeBool, value)
+		_node.AutoAdvanceWeek = value
 	}
 	if value, ok := _c.mutation.Status(); ok {
 		_spec.SetField(usersubscription.FieldStatus, field.TypeString, value)
@@ -675,6 +700,18 @@ func (u *UserSubscriptionUpsert) SetExpiresAt(v time.Time) *UserSubscriptionUpse
 // UpdateExpiresAt sets the "expires_at" field to the value that was provided on create.
 func (u *UserSubscriptionUpsert) UpdateExpiresAt() *UserSubscriptionUpsert {
 	u.SetExcluded(usersubscription.FieldExpiresAt)
+	return u
+}
+
+// SetAutoAdvanceWeek sets the "auto_advance_week" field.
+func (u *UserSubscriptionUpsert) SetAutoAdvanceWeek(v bool) *UserSubscriptionUpsert {
+	u.Set(usersubscription.FieldAutoAdvanceWeek, v)
+	return u
+}
+
+// UpdateAutoAdvanceWeek sets the "auto_advance_week" field to the value that was provided on create.
+func (u *UserSubscriptionUpsert) UpdateAutoAdvanceWeek() *UserSubscriptionUpsert {
+	u.SetExcluded(usersubscription.FieldAutoAdvanceWeek)
 	return u
 }
 
@@ -979,6 +1016,20 @@ func (u *UserSubscriptionUpsertOne) SetExpiresAt(v time.Time) *UserSubscriptionU
 func (u *UserSubscriptionUpsertOne) UpdateExpiresAt() *UserSubscriptionUpsertOne {
 	return u.Update(func(s *UserSubscriptionUpsert) {
 		s.UpdateExpiresAt()
+	})
+}
+
+// SetAutoAdvanceWeek sets the "auto_advance_week" field.
+func (u *UserSubscriptionUpsertOne) SetAutoAdvanceWeek(v bool) *UserSubscriptionUpsertOne {
+	return u.Update(func(s *UserSubscriptionUpsert) {
+		s.SetAutoAdvanceWeek(v)
+	})
+}
+
+// UpdateAutoAdvanceWeek sets the "auto_advance_week" field to the value that was provided on create.
+func (u *UserSubscriptionUpsertOne) UpdateAutoAdvanceWeek() *UserSubscriptionUpsertOne {
+	return u.Update(func(s *UserSubscriptionUpsert) {
+		s.UpdateAutoAdvanceWeek()
 	})
 }
 
@@ -1477,6 +1528,20 @@ func (u *UserSubscriptionUpsertBulk) SetExpiresAt(v time.Time) *UserSubscription
 func (u *UserSubscriptionUpsertBulk) UpdateExpiresAt() *UserSubscriptionUpsertBulk {
 	return u.Update(func(s *UserSubscriptionUpsert) {
 		s.UpdateExpiresAt()
+	})
+}
+
+// SetAutoAdvanceWeek sets the "auto_advance_week" field.
+func (u *UserSubscriptionUpsertBulk) SetAutoAdvanceWeek(v bool) *UserSubscriptionUpsertBulk {
+	return u.Update(func(s *UserSubscriptionUpsert) {
+		s.SetAutoAdvanceWeek(v)
+	})
+}
+
+// UpdateAutoAdvanceWeek sets the "auto_advance_week" field to the value that was provided on create.
+func (u *UserSubscriptionUpsertBulk) UpdateAutoAdvanceWeek() *UserSubscriptionUpsertBulk {
+	return u.Update(func(s *UserSubscriptionUpsert) {
+		s.UpdateAutoAdvanceWeek()
 	})
 }
 
