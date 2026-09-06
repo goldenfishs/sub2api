@@ -352,6 +352,17 @@ func (r *userSubscriptionRepository) ExtendExpiry(ctx context.Context, subscript
 	return translatePersistenceError(err, service.ErrSubscriptionNotFound, nil)
 }
 
+func (r *userSubscriptionRepository) ApplyWeeklyAdvance(ctx context.Context, id int64, weeklyStart, expiresAt time.Time, monthlyStart *time.Time, monthlyUsage float64) error {
+	_, err := clientFromContext(ctx, r.client).UserSubscription.UpdateOneID(id).
+		SetWeeklyWindowStart(weeklyStart).
+		SetWeeklyUsageUsd(0).
+		SetExpiresAt(expiresAt).
+		SetNillableMonthlyWindowStart(monthlyStart).
+		SetMonthlyUsageUsd(monthlyUsage).
+		Save(ctx)
+	return translatePersistenceError(err, service.ErrSubscriptionNotFound, nil)
+}
+
 func (r *userSubscriptionRepository) UpdateStatus(ctx context.Context, subscriptionID int64, status string) error {
 	client := clientFromContext(ctx, r.client)
 	_, err := client.UserSubscription.UpdateOneID(subscriptionID).

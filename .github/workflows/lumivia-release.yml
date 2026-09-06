@@ -34,6 +34,8 @@ jobs:
           tests=$(go test -tags=unit ./internal/service -list 'TestWeeklyAdvance|TestLumivia')
           grep -q '^TestWeeklyAdvanceCalculation$' <<< "$tests"
           grep -q '^TestWeeklyAdvanceAutomaticRechecksStoredOptIn$' <<< "$tests"
+          grep -q '^TestWeeklyAdvanceMonthlyLimitAfterShift$' <<< "$tests"
+          grep -q '^TestWeeklyAdvanceRepeatedMonthlyShift$' <<< "$tests"
           grep -q '^TestLumiviaUpdatesUseFork$' <<< "$tests"
           go test -tags=unit ./internal/service -run 'TestWeeklyAdvance|TestValidateAndCheckLimits|TestLumivia|TestUpdateService' -count=1
           go test -tags=unit ./internal/server -run '^TestAPIContracts$' -count=1

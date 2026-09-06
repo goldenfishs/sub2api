@@ -54,6 +54,22 @@ func (s *SubscriptionService) AdvanceWeek(ctx context.Context, userID, id int64,
 	return s.advanceWeek(ctx, userID, id, expectedStart, expectedExpiry, false)
 }
 
+// Spend the same subscription time on the monthly clock. Usage is retained
+// until the advanced clock crosses a full monthly boundary before expiry.
+func monthlyWindowAfterWeeklyAdvance(sub *UserSubscription, newExpiry, now time.Time) (*time.Time, float64) {
+	if sub.MonthlyWindowStart == nil {
+		return nil, sub.MonthlyUsageUSD
+	}
+	start := sub.windowResetAnchor(*sub.MonthlyWindowStart).Add(newExpiry.Sub(sub.ExpiresAt))
+	effective := *sub
+	effective.MonthlyWindowStart = &start
+	effective.ExpiresAt = newExpiry
+	if next, ok := effective.automaticWindowStartAt(&start, 30*24*time.Hour, now); ok {
+		return &next, 0
+	}
+	return &start, sub.MonthlyUsageUSD
+}
+
 func (s *SubscriptionService) advanceWeek(ctx context.Context, userID, id int64, expectedStart, expectedExpiry time.Time, automatic bool) (*WeeklyAdvancePreview, error) {
 	var result *WeeklyAdvancePreview
 	var groupID int64
@@ -80,13 +96,10 @@ func (s *SubscriptionService) advanceWeek(ctx context.Context, userID, id int64,
 		if err != nil {
 			return err
 		}
-		// Both writes share the transaction and row lock. Daily/monthly usage and
-		// their anchors are deliberately preserved; in-flight billing serializes
-		// on this same subscription row and is never overwritten by stale snapshots.
-		if err := s.userSubRepo.ResetUsageWindows(txCtx, id, false, true, false, now, now); err != nil {
-			return err
-		}
-		if err := s.userSubRepo.ExtendExpiry(txCtx, id, result.NewExpiresAt); err != nil {
+		monthlyStart, monthlyUsage := monthlyWindowAfterWeeklyAdvance(sub, result.NewExpiresAt, now)
+		// Persist all affected fields together under the existing row lock, so
+		// replayed requests and concurrent billing cannot overwrite each other.
+		if err := s.userSubRepo.ApplyWeeklyAdvance(txCtx, id, now, result.NewExpiresAt, monthlyStart, monthlyUsage); err != nil {
 			return err
 		}
 		groupID = sub.GroupID

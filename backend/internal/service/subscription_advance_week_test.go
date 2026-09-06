@@ -12,7 +12,7 @@ import (
 
 func weeklyAdvanceFixture() (*UserSubscription, *Group, time.Time) {
 	start := time.Date(2026, 9, 1, 12, 0, 0, 0, time.UTC)
-	return &UserSubscription{ID: 10, UserID: 20, GroupID: 30, Status: SubscriptionStatusActive, StartsAt: start, ExpiresAt: start.Add(30 * 24 * time.Hour), WeeklyWindowStart: &start, WeeklyUsageUSD: 30, DailyUsageUSD: 4, MonthlyUsageUSD: 50}, &Group{ID: 30, SubscriptionType: "subscription", WeeklyLimitUSD: ptrWeeklyLimit(30)}, start.Add(2 * 24 * time.Hour)
+	return &UserSubscription{ID: 10, UserID: 20, GroupID: 30, Status: SubscriptionStatusActive, StartsAt: start, ExpiresAt: start.Add(30 * 24 * time.Hour), WeeklyWindowStart: &start, MonthlyWindowStart: &start, WeeklyUsageUSD: 30, DailyUsageUSD: 4, MonthlyUsageUSD: 50}, &Group{ID: 30, SubscriptionType: "subscription", WeeklyLimitUSD: ptrWeeklyLimit(30)}, start.Add(2 * 24 * time.Hour)
 }
 func ptrWeeklyLimit(v float64) *float64 { return &v }
 
@@ -69,16 +69,12 @@ func (r *weeklyAdvanceRepo) GetByID(context.Context, int64) (*UserSubscription, 
 func (r *weeklyAdvanceRepo) GetByIDForUpdate(ctx context.Context, id int64) (*UserSubscription, error) {
 	return r.GetByID(ctx, id)
 }
-func (r *weeklyAdvanceRepo) ResetUsageWindows(_ context.Context, _ int64, d, w, m bool, _, now time.Time) error {
-	if d || !w || m {
-		panic("must reset only weekly quota")
-	}
+func (r *weeklyAdvanceRepo) ApplyWeeklyAdvance(_ context.Context, _ int64, now, expires time.Time, monthlyStart *time.Time, monthlyUsage float64) error {
 	r.sub.WeeklyUsageUSD = 0
 	r.sub.WeeklyWindowStart = &now
-	return nil
-}
-func (r *weeklyAdvanceRepo) ExtendExpiry(_ context.Context, _ int64, expires time.Time) error {
 	r.sub.ExpiresAt = expires
+	r.sub.MonthlyWindowStart = monthlyStart
+	r.sub.MonthlyUsageUSD = monthlyUsage
 	return nil
 }
 
@@ -106,6 +102,7 @@ func TestWeeklyAdvanceOwnershipAndReplay(t *testing.T) {
 	require.Equal(t, float64(50), sub.MonthlyUsageUSD)
 	require.Equal(t, now, *sub.WeeklyWindowStart)
 	require.Equal(t, expiry.Add(-5*24*time.Hour), sub.ExpiresAt)
+	require.Equal(t, start.Add(-5*24*time.Hour), *sub.MonthlyWindowStart)
 	_, err = svc.AdvanceWeek(context.Background(), sub.UserID, sub.ID, start, expiry)
 	require.ErrorIs(t, err, ErrWeeklyAdvanceStale)
 	require.Equal(t, expiry.Add(-5*24*time.Hour), sub.ExpiresAt)
@@ -172,4 +169,79 @@ func TestWeeklyAdvanceRequestMaintenance(t *testing.T) {
 	require.Zero(t, refreshed.WeeklyUsageUSD)
 	require.Equal(t, expiry.Add(-5*24*time.Hour), refreshed.ExpiresAt)
 	require.True(t, refreshed.AutoAdvanceWeek)
+}
+
+func TestWeeklyAdvanceMonthlyClock(t *testing.T) {
+	for _, tc := range []struct {
+		name                 string
+		age, expiry, wantAge time.Duration
+		wantUsage            float64
+	}{
+		{"preserve usage", 2 * 24 * time.Hour, 28 * 24 * time.Hour, 7 * 24 * time.Hour, 50},
+		{"renewed subscription crosses month", 28 * 24 * time.Hour, 32 * 24 * time.Hour, 3 * 24 * time.Hour, 0},
+		{"exact month boundary", 25 * 24 * time.Hour, 35 * 24 * time.Hour, 0, 0},
+		{"expiry is not a new month", 25 * 24 * time.Hour, 5 * 24 * time.Hour, 30 * 24 * time.Hour, 50},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			sub, _, now := weeklyAdvanceFixture()
+			start := now.Add(-tc.age)
+			sub.StartsAt = start
+			sub.MonthlyWindowStart = &start
+			sub.ExpiresAt = now.Add(tc.expiry)
+			monthly, usage := monthlyWindowAfterWeeklyAdvance(sub, sub.ExpiresAt.Add(-5*24*time.Hour), now)
+			require.Equal(t, now.Add(-tc.wantAge), *monthly)
+			require.Equal(t, tc.wantUsage, usage)
+		})
+	}
+	sub, _, now := weeklyAdvanceFixture()
+	sub.MonthlyWindowStart = nil
+	monthly, usage := monthlyWindowAfterWeeklyAdvance(sub, sub.ExpiresAt.Add(-time.Hour), now)
+	require.Nil(t, monthly)
+	require.Equal(t, sub.MonthlyUsageUSD, usage)
+	legacy := startOfDay(sub.StartsAt)
+	sub.MonthlyWindowStart = &legacy
+	monthly, usage = monthlyWindowAfterWeeklyAdvance(sub, sub.ExpiresAt.Add(-90*time.Minute), now)
+	require.Equal(t, sub.StartsAt.Add(-90*time.Minute), *monthly)
+	require.Equal(t, sub.MonthlyUsageUSD, usage)
+}
+
+func TestWeeklyAdvanceMonthlyLimitAfterShift(t *testing.T) {
+	sub, group, now := weeklyAdvanceFixture()
+	group.Status = "active"
+	group.MonthlyLimitUSD = ptrWeeklyLimit(50)
+	sub.AutoAdvanceWeek = true
+	// Monthly quota exhausted but the advanced clock has not reached renewal.
+	require.False(t, canAutoAdvanceWeek(sub, group, now))
+	month := now.Add(-28 * 24 * time.Hour)
+	sub.StartsAt = month
+	sub.MonthlyWindowStart = &month
+	sub.ExpiresAt = month.Add(60 * 24 * time.Hour)
+	require.True(t, canAutoAdvanceWeek(sub, group, now))
+	repo := &weeklyAdvanceRepo{sub: sub}
+	svc := &SubscriptionService{userSubRepo: repo, groupRepo: &weeklyAdvanceGroupRepo{group: group}, now: func() time.Time { return now }}
+	_, err := svc.advanceWeek(context.Background(), sub.UserID, sub.ID, *sub.WeeklyWindowStart, sub.ExpiresAt, true)
+	require.NoError(t, err)
+	require.Zero(t, sub.MonthlyUsageUSD)
+	require.Equal(t, now.Add(-3*24*time.Hour), *sub.MonthlyWindowStart)
+	require.Equal(t, float64(4), sub.DailyUsageUSD)
+}
+
+func TestWeeklyAdvanceRepeatedMonthlyShift(t *testing.T) {
+	sub, group, now := weeklyAdvanceFixture()
+	sub.ExpiresAt = sub.StartsAt.Add(90 * 24 * time.Hour)
+	repo := &weeklyAdvanceRepo{sub: sub}
+	svc := &SubscriptionService{userSubRepo: repo, groupRepo: &weeklyAdvanceGroupRepo{group: group}, now: func() time.Time { return now }}
+	for i := 0; i < 5; i++ {
+		oldMonth, oldExpiry := *sub.MonthlyResetTime(), sub.ExpiresAt
+		sub.WeeklyUsageUSD = 30
+		_, err := svc.AdvanceWeek(context.Background(), sub.UserID, sub.ID, *sub.WeeklyWindowStart, oldExpiry)
+		require.NoError(t, err)
+		expected := oldMonth.Add(sub.ExpiresAt.Sub(oldExpiry))
+		if !expected.After(now) {
+			expected = expected.Add(30 * 24 * time.Hour)
+			require.Zero(t, sub.MonthlyUsageUSD)
+		}
+		require.Equal(t, expected, *sub.MonthlyResetTime())
+		now = now.Add(24 * time.Hour)
+	}
 }

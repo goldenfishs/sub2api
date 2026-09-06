@@ -2266,6 +2266,10 @@ func (stubUserSubscriptionRepo) ExistsByUserIDAndGroupID(ctx context.Context, us
 func (stubUserSubscriptionRepo) ExistsActiveByUserIDAndGroupID(ctx context.Context, userID, groupID int64) (bool, error) {
 	return false, errors.New("not implemented")
 }
+func (stubUserSubscriptionRepo) ApplyWeeklyAdvance(context.Context, int64, time.Time, time.Time, *time.Time, float64) error {
+	panic("unexpected ApplyWeeklyAdvance call")
+}
+
 func (stubUserSubscriptionRepo) ExtendExpiry(ctx context.Context, subscriptionID int64, newExpiresAt time.Time) error {
 	return errors.New("not implemented")
 }
