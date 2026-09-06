@@ -81,6 +81,10 @@ func (r *subscriptionExpiryRepoStub) ExtendExpiry(context.Context, int64, time.T
 	return nil
 }
 
+func (r *subscriptionExpiryRepoStub) ApplyWeeklyAdvance(context.Context, int64, time.Time, time.Time, *time.Time, float64) error {
+	return nil
+}
+
 func (r *subscriptionExpiryRepoStub) UpdateStatus(context.Context, int64, string) error {
 	return nil
 }

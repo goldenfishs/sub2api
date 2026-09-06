@@ -22,7 +22,9 @@ func canAutoAdvanceWeek(sub *UserSubscription, group *Group, now time.Time) bool
 	if effective.canAutomaticallyResetDailyAt(now) {
 		effective.DailyUsageUSD = 0
 	}
-	if effective.canAutomaticallyResetMonthlyAt(now) {
+	if preview, err := weeklyAdvancePreview(sub, group, now); err == nil {
+		effective.MonthlyWindowStart, effective.MonthlyUsageUSD = monthlyWindowAfterWeeklyAdvance(sub, preview.NewExpiresAt, now)
+	} else if effective.canAutomaticallyResetMonthlyAt(now) {
 		effective.MonthlyUsageUSD = 0
 	}
 	return (!group.HasDailyLimit() || effective.DailyUsageUSD < *group.DailyLimitUSD) &&

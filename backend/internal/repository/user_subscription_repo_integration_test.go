@@ -84,6 +84,32 @@ func (s *UserSubscriptionRepoSuite) mustCreateSubscription(userID, groupID int64
 
 // --- Create / GetByID / Update / Delete ---
 
+func (s *UserSubscriptionRepoSuite) TestApplyWeeklyAdvancePreservesOtherFields() {
+	user := s.mustCreateUser("advance-month@test.com", service.RoleUser)
+	group := s.mustCreateGroup("advance-month")
+	now := time.Date(2026, 9, 6, 12, 0, 0, 0, time.UTC)
+	oldStart := now.Add(-48 * time.Hour)
+	sub := s.mustCreateSubscription(user.ID, group.ID, func(c *dbent.UserSubscriptionCreate) {
+		c.SetWeeklyWindowStart(oldStart).SetMonthlyWindowStart(oldStart).
+			SetDailyWindowStart(oldStart).SetWeeklyUsageUsd(30).SetMonthlyUsageUsd(80).
+			SetDailyUsageUsd(4).SetAutoAdvanceWeek(true).SetNotes("keep me")
+	})
+	month := oldStart.Add(-5 * 24 * time.Hour)
+	expiry := now.Add(25 * 24 * time.Hour)
+	s.Require().NoError(s.repo.ApplyWeeklyAdvance(s.ctx, sub.ID, now, expiry, &month, 80))
+	got, err := s.repo.GetByID(s.ctx, sub.ID)
+	s.Require().NoError(err)
+	s.Require().True(got.WeeklyWindowStart.Equal(now))
+	s.Require().True(got.MonthlyWindowStart.Equal(month))
+	s.Require().True(got.ExpiresAt.Equal(expiry))
+	s.Require().Zero(got.WeeklyUsageUSD)
+	s.Require().Equal(float64(80), got.MonthlyUsageUSD)
+	s.Require().Equal(float64(4), got.DailyUsageUSD)
+	s.Require().True(got.DailyWindowStart.Equal(oldStart))
+	s.Require().True(got.AutoAdvanceWeek)
+	s.Require().Equal("keep me", got.Notes)
+}
+
 func (s *UserSubscriptionRepoSuite) TestCreate() {
 	user := s.mustCreateUser("sub-create@test.com", service.RoleUser)
 	group := s.mustCreateGroup("g-create")
