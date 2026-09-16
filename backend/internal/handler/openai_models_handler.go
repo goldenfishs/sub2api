@@ -92,8 +92,12 @@ func writeRetrievedModel(c *gin.Context, body []byte) {
 			writeOpenAIModelsError(c, http.StatusBadGateway, "upstream_error", "Invalid model catalogue entry")
 			return
 		}
+		rawID, ok := model["id"]
+		if !ok {
+			rawID = model["ID"]
+		}
 		var id string
-		if err := json.Unmarshal(model["id"], &id); err != nil {
+		if err := json.Unmarshal(rawID, &id); err != nil {
 			writeOpenAIModelsError(c, http.StatusBadGateway, "upstream_error", "Invalid model catalogue ID")
 			return
 		}

@@ -112,3 +112,12 @@ func TestRetrievePinnedModelPreservesMetadataFilteringAndErrors(t *testing.T) {
 		})
 	}
 }
+
+func TestWriteRetrievedModelFallsBackToUppercaseID(t *testing.T) {
+	rec := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(rec)
+	c.Params = gin.Params{{Key: "model", Value: "special-model"}}
+	writeRetrievedModel(c, []byte(`{"data":[{"ID":"special-model","owned_by":"source-owner","created":123}]}`))
+	require.Equal(t, http.StatusOK, rec.Code)
+	require.Contains(t, rec.Body.String(), `"ID":"special-model"`)
+}
