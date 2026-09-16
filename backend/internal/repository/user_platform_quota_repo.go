@@ -69,6 +69,7 @@ type UserPlatformQuotaRepository interface {
 	UpsertForUser(ctx context.Context, userID int64, records []UserPlatformQuotaRecord) error
 	// BatchSnapshotUsage 把整批 usage 以绝对值覆盖写入既有活跃行(非累加)；行不存在或已软删的 (user,platform) 跳过。
 	// usage/window_start 直接取 Redis 当前窗口快照。整批共用 now 作 updated_at。要求 snapshots 内 (user,platform) 不重复。
+	// 该实现仅 UPDATE 既有行、不做 INSERT，因此当前实现下不会返回 ErrUserPlatformQuotaFKViolation。
 	BatchSnapshotUsage(ctx context.Context, snapshots []UserPlatformQuotaSnapshot, now time.Time) error
 }
 

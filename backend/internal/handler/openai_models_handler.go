@@ -89,17 +89,18 @@ func writeRetrievedModel(c *gin.Context, body []byte) {
 	for _, raw := range catalog.Data {
 		var model map[string]json.RawMessage
 		if err := json.Unmarshal(raw, &model); err != nil {
-			writeOpenAIModelsError(c, http.StatusBadGateway, "upstream_error", "Invalid model catalogue entry")
-			return
+			continue
 		}
 		rawID, ok := model["id"]
-		if !ok {
+		if !ok || len(rawID) == 0 || string(rawID) == "null" {
 			rawID = model["ID"]
+		}
+		if len(rawID) == 0 || string(rawID) == "null" {
+			continue
 		}
 		var id string
 		if err := json.Unmarshal(rawID, &id); err != nil {
-			writeOpenAIModelsError(c, http.StatusBadGateway, "upstream_error", "Invalid model catalogue ID")
-			return
+			continue
 		}
 		if id == modelID {
 			c.Data(http.StatusOK, "application/json", raw)

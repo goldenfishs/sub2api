@@ -61,3 +61,35 @@ func TestOpsRepositoryListRequestDetails_LatencySort(t *testing.T) {
 		})
 	}
 }
+
+func TestOpsRepositoryListRequestDetails_DefaultSortIncludesFirstTokenMs(t *testing.T) {
+	db, mock := newSQLMock(t)
+	repo := &opsRepository{db: db}
+	start := time.Date(2026, 9, 10, 0, 0, 0, 0, time.UTC)
+	end := start.Add(time.Hour)
+	filter := &service.OpsRequestDetailFilter{
+		StartTime: &start,
+		EndTime:   &end,
+		Page:      1,
+		PageSize:  5,
+	}
+
+	mock.ExpectQuery(`SELECT COUNT\(1\) FROM combined`).
+		WithArgs(start, end).
+		WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(1))
+	rows := sqlmock.NewRows([]string{
+		"kind", "created_at", "request_id", "platform", "model", "duration_ms", "first_token_ms",
+		"status_code", "error_id", "phase", "severity", "message", "user_id", "api_key_id", "account_id", "group_id", "stream",
+	}).AddRow("success", start, "req-default", "openai", "gpt-5.5", 2400, 321, nil, nil, nil, nil, nil, 1, 2, 3, 4, true)
+	mock.ExpectQuery(`(?s)SELECT.*duration_ms,\s+first_token_ms,.*ORDER BY created_at DESC\s+LIMIT \$3 OFFSET \$4`).
+		WithArgs(start, end, 5, 0).
+		WillReturnRows(rows)
+
+	items, total, err := repo.ListRequestDetails(context.Background(), filter)
+	require.NoError(t, err)
+	require.EqualValues(t, 1, total)
+	require.Len(t, items, 1)
+	require.NotNil(t, items[0].FirstTokenMs)
+	require.Equal(t, 321, *items[0].FirstTokenMs)
+	require.NoError(t, mock.ExpectationsWereMet())
+}

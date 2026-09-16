@@ -121,3 +121,12 @@ func TestWriteRetrievedModelFallsBackToUppercaseID(t *testing.T) {
 	require.Equal(t, http.StatusOK, rec.Code)
 	require.Contains(t, rec.Body.String(), `"ID":"special-model"`)
 }
+
+func TestWriteRetrievedModelSkipsMalformedEntries(t *testing.T) {
+	rec := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(rec)
+	c.Params = gin.Params{{Key: "model", Value: "special-model"}}
+	writeRetrievedModel(c, []byte(`{"data":[1,{"id":123},{"ID":"special-model","owned_by":"source-owner","created":123}]}`))
+	require.Equal(t, http.StatusOK, rec.Code)
+	require.Contains(t, rec.Body.String(), `"ID":"special-model"`)
+}
