@@ -326,6 +326,7 @@ type DefaultSubscriptionSetting struct {
 }
 
 type PublicSettings struct {
+	ModelCheckEnabled                   bool `json:"model_check_enabled"`
 	RegistrationEnabled                 bool
 	EmailVerifyEnabled                  bool
 	ForceEmailOnThirdPartySignup        bool

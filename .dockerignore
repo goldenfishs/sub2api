@@ -34,6 +34,16 @@ build/
 # Node modules (will be installed in container)
 frontend/node_modules/
 node_modules/
+extensions/model-check/node_modules/
+
+# Model-check local state contains the scheduler database and its encryption
+# key. Never send either to a builder or copy them into a release image.
+**/.data/
+**/encryption.key
+**/*.sqlite
+**/*.sqlite-*
+extensions/model-check/test-results/
+extensions/model-check/playwright-report/
 
 # Go build cache (will be built in container)
 backend/vendor/

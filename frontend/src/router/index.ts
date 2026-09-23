@@ -13,6 +13,7 @@ import { useRoutePrefetch } from '@/composables/useRoutePrefetch'
 import { getSetupStatus } from '@/api/setup'
 import { resolveCompletedSetupRedirectPath } from './setupRedirect'
 import { resolveRouteDocumentTitle } from './title'
+import { isModelCheckEnabled } from '@/utils/featureFlags'
 
 /**
  * Route definitions with lazy loading
@@ -815,6 +816,16 @@ router.beforeEach(async (to, _from, next) => {
   // Check if route requires authentication
   const requiresAuth = to.meta.requiresAuth !== false // Default to true
   const requiresAdmin = to.meta.requiresAdmin === true
+
+  if (!import.meta.env.DEV && (to.path === '/model-check' || to.path === '/admin/model-check')) {
+    if (!appStore.publicSettingsLoaded) {
+      await appStore.fetchPublicSettings()
+    }
+    if (!isModelCheckEnabled()) {
+      next(authStore.isAuthenticated ? (authStore.isAdmin ? '/admin/dashboard' : '/dashboard') : '/home')
+      return
+    }
+  }
 
   if (to.path === '/setup') {
     try {

@@ -3,7 +3,7 @@ import { mkdirSync } from 'node:fs';
 import { resolve, join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { Store, publicRun, publicChannel } from './store.mjs';
-import { CheckError, normalizeBase, resolveEndpoint, requestJSON, secretVault } from './security.mjs';
+import { CheckError, normalizeBase, resolveEndpoint, requestJSON, secretVault, BRIDGE_HEADER, validBridgeSecret, loopbackAddress, loopbackOrigin, signBridge, verifyBridge } from './security.mjs';
 import { makePrompt, makeScheduledPrompt, validateOptions, TOPICS } from './prompts.mjs';
 import { renderArtwork, assess } from './render.mjs';
 import { sampleHTML } from './samples.mjs';
@@ -58,6 +58,11 @@ export async function generateRun(run, credential, trustedBase) {
 }
 
 export function createService(config, dependencies = {}) {
+  if (config.bridgeSecret) {
+    if (!validBridgeSecret(config.bridgeSecret)) throw new Error('MODEL_CHECK_BRIDGE_SECRET must contain 32 to 256 printable ASCII characters without spaces.');
+    if (!loopbackOrigin(config.backend)) throw new Error('Bridge mode requires a literal HTTP loopback SUB2API_BACKEND origin.');
+    if (config.demo) throw new Error('Demo mode cannot be exposed through the production bridge.');
+  }
   mkdirSync(config.dataDir, { recursive: true, mode: 0o700 });
   const store = dependencies.store || new Store(join(config.dataDir, 'model-check.sqlite'));
   const vault = secretVault(config.dataDir);
@@ -65,14 +70,18 @@ export function createService(config, dependencies = {}) {
   const generate = dependencies.generate || generateRun;
   const queue = []; const busyChannels = new Set(); const runningOwners = new Set();
   let running = 0; let closing = false; let lastDemo = 0;
+  const requestIdentities = new WeakMap();
 
   async function backend(req, route, adminKey = false) {
     const token = adminKey ? String(req.headers['x-api-key'] || '') : String(req.headers.authorization || '').match(/^Bearer ([^\s]{1,4096})$/)?.[1];
     if (!token || !/^[^\s]{1,4096}$/.test(token)) throw new CheckError(adminKey ? 'invalid_admin_key' : 'login_required', 401);
     const base = `${config.backend.replace(/\/$/, '')}/api/v1`;
     const endpoint = await resolveEndpoint(base, route, base);
-    const headers = { 'User-Agent': String(req.headers['user-agent'] || '').slice(0, 500), ...(adminKey ? { 'x-api-key': token } : {}) };
-    try { return await requestJSON(endpoint, { method: 'GET', key: adminKey ? '' : token, timeout: 6000, headers }); }
+    const headers = { 'user-agent': String(req.headers['user-agent'] || ''), ...(adminKey ? { 'x-api-key': token } : { authorization: `Bearer ${token}` }) };
+    if (config.bridgeSecret) {
+      headers[BRIDGE_HEADER] = signBridge(config.bridgeSecret, { method: 'GET', url: endpoint.url.pathname + endpoint.url.search, headers }, requestIdentities.get(req));
+    }
+    try { return await requestJSON(endpoint, { method: 'GET', timeout: 6000, headers }); }
     catch (error) { if (error.code?.startsWith('upstream_auth')) throw newError401(adminKey); throw new CheckError('account_service_unavailable', 503); }
   }
   const authenticate = dependencies.authenticate || (async req => {
@@ -183,6 +192,15 @@ export function createService(config, dependencies = {}) {
       const path = url.pathname;
       if (!path.startsWith(PREFIX + '/')) throw new CheckError('not_found', 404);
       const route = path.slice(PREFIX.length);
+      if (config.bridgeSecret) {
+        if (!loopbackAddress(req.socket.remoteAddress)) throw new CheckError('internal_bridge_required', 403);
+        // A local health probe has no account access or side effects.
+        if (!(req.method === 'GET' && route === '/health')) {
+          const identity = verifyBridge(config.bridgeSecret, req);
+          if (!identity) throw new CheckError('internal_bridge_required', 403);
+          requestIdentities.set(req, identity);
+        }
+      }
       if (req.method === 'GET' && route === '/overview') {
         const supported = record => TOPICS.some(topic => topic.id === record.topic);
         const channels = store.channels().filter(c => c.public && supported(c));
@@ -328,8 +346,9 @@ export function createService(config, dependencies = {}) {
 }
 
 if (import.meta.url === pathToFileURL(process.argv[1] || '').href) {
-  const config = { dataDir: resolve(process.env.MODEL_CHECK_DATA_DIR || '.data'), backend: process.env.SUB2API_BACKEND || 'http://127.0.0.1:8080', siteApiBase: process.env.MODEL_CHECK_SITE_API_BASE || 'http://127.0.0.1:8080/v1', demo: process.env.MODEL_CHECK_DEMO === '1' };
+  const config = { dataDir: resolve(process.env.MODEL_CHECK_DATA_DIR || '.data'), backend: process.env.SUB2API_BACKEND || 'http://127.0.0.1:8080', siteApiBase: process.env.MODEL_CHECK_SITE_API_BASE || 'http://127.0.0.1:8080/v1', demo: process.env.MODEL_CHECK_DEMO === '1', bridgeSecret: process.env.MODEL_CHECK_BRIDGE_SECRET || '' };
   const host = process.env.MODEL_CHECK_HOST || '127.0.0.1';
+  if (config.bridgeSecret && !loopbackAddress(host)) throw new Error('Bridge mode must bind to a literal loopback IP.');
   if (config.demo && !['127.0.0.1', '::1', 'localhost'].includes(host)) throw new Error('Demo mode must bind to loopback.');
   const app = createService(config);
   app.server.listen(Number(process.env.MODEL_CHECK_PORT || 8096), host, async () => { console.log('Lumivia model check listening on loopback port ' + (process.env.MODEL_CHECK_PORT || 8096)); await app.seedDemo(); });

@@ -1,6 +1,8 @@
 # 模型智检管理员 API
 
-本地地址：`http://localhost:3000/api/v1/model-check`（也可直接访问本地服务 `http://127.0.0.1:8096/api/v1/model-check`）。本功能尚未部署到线上。
+本地预览地址：`http://localhost:3000/api/v1/model-check`。按 [部署说明](./DEPLOYMENT.md) 启用后，接口位于主站域名下的 `/api/v1/model-check`；下文示例中的 `http://localhost:3000` 替换为自己的主站地址即可。发布仓库不会自动启用线上服务。
+
+生产请求统一通过 Go 主站入口。启用身份桥的智检内部端口只接受回环上的签名请求，不能绕过主站直连调用。
 
 使用「系统设置 → 管理员 API Key」生成的全局管理员密钥，放在 **`x-api-key`** 请求头。网页登录的管理员 JWT 也可使用 `Authorization: Bearer ...`。两者同时提供时只校验 `x-api-key`，不会回退到 JWT。
 

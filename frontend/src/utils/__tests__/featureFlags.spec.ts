@@ -1,7 +1,7 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest'
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { setActivePinia, createPinia } from 'pinia'
 import { useAppStore } from '@/stores/app'
-import { FeatureFlags, isFeatureFlagEnabled, makeSidebarFlag, resolveFeatureFlag } from '@/utils/featureFlags'
+import { FeatureFlags, isFeatureFlagEnabled, isModelCheckEnabled, makeSidebarFlag, resolveFeatureFlag } from '@/utils/featureFlags'
 import type { PublicSettings } from '@/types'
 
 vi.mock('@/api/admin/system', () => ({
@@ -37,6 +37,33 @@ describe('FeatureFlags.subscription', () => {
 
     store.cachedPublicSettings = {} as PublicSettings
     expect(sidebarFlag()).toBe(true)
+  })
+})
+
+describe('model-check runtime availability', () => {
+  beforeEach(() => {
+    setActivePinia(createPinia())
+    delete window.__APP_CONFIG__
+    vi.stubEnv('DEV', false)
+  })
+
+  afterEach(() => vi.unstubAllEnvs())
+
+  it('keeps a production build hidden until its backend enables the companion', () => {
+    const store = useAppStore()
+    expect(isModelCheckEnabled()).toBe(false)
+    store.cachedPublicSettings = {} as PublicSettings
+    expect(isModelCheckEnabled()).toBe(false)
+    store.cachedPublicSettings = { model_check_enabled: true } as PublicSettings
+    expect(isModelCheckEnabled()).toBe(true)
+    store.cachedPublicSettings = { model_check_enabled: false } as PublicSettings
+    expect(isModelCheckEnabled()).toBe(false)
+  })
+
+  it('allows the standalone Vite preview against an older local backend', () => {
+    vi.stubEnv('DEV', true)
+    useAppStore().cachedPublicSettings = {} as PublicSettings
+    expect(isModelCheckEnabled()).toBe(true)
   })
 })
 
