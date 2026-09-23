@@ -2,9 +2,11 @@ package middleware
 
 import (
 	"strings"
+	"time"
 
 	"github.com/Wei-Shaw/sub2api/internal/config"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/ip"
+	"github.com/Wei-Shaw/sub2api/internal/pkg/modelcheckbridge"
 	"github.com/Wei-Shaw/sub2api/internal/service"
 
 	"github.com/gin-gonic/gin"
@@ -17,6 +19,15 @@ import (
 // 接管解析，关闭时使用 Gin 的 server.trusted_proxies 可信代理链。
 func SessionBindingContext(cfg *config.Config) gin.HandlerFunc {
 	return func(c *gin.Context) {
+		// Only authenticated loopback callbacks to the narrow read-only account
+		// allowlist may carry the already-resolved client identity. This leaves
+		// trusted_proxies and normal JWT/API-key authorization unchanged.
+		var bridged modelcheckbridge.Identity
+		var bridgeOK bool
+		if cfg != nil && cfg.ModelCheck.Enabled && modelcheckbridge.IsAuthCallback(c.Request) {
+			bridged, bridgeOK = modelcheckbridge.Verify(cfg.ModelCheck.BridgeSecret, c.Request, time.Now())
+		}
+		c.Request.Header.Del(modelcheckbridge.Header)
 		forwardedIPSettings := cfg.ForwardedClientIPSettings()
 		ip.SetForwardedIPSettings(c, forwardedIPSettings.TrustForwardedIP, forwardedIPSettings.Headers)
 		userAgent := normalizePersistentText(c.Request.UserAgent(), maxPersistentUserAgentBytes)
@@ -24,6 +35,9 @@ func SessionBindingContext(cfg *config.Config) gin.HandlerFunc {
 		binding := &service.SessionBinding{
 			IP:        ip.GetSecurityClientIP(c, forwardedIPSettings.TrustForwardedIP),
 			UserAgent: userAgent,
+		}
+		if bridgeOK {
+			binding.IP = bridged.IP
 		}
 		c.Request = c.Request.WithContext(service.WithSessionBinding(c.Request.Context(), binding))
 		c.Next()

@@ -13,6 +13,7 @@ import { useRoutePrefetch } from '@/composables/useRoutePrefetch'
 import { getSetupStatus } from '@/api/setup'
 import { resolveCompletedSetupRedirectPath } from './setupRedirect'
 import { resolveRouteDocumentTitle } from './title'
+import { isModelCheckEnabled } from '@/utils/featureFlags'
 
 /**
  * Route definitions with lazy loading
@@ -30,6 +31,18 @@ const routes: RouteRecordRaw[] = [
   },
 
   // ==================== Public Routes ====================
+  {
+    path: '/model-check',
+    name: 'ModelCheck',
+    component: () => import('@/views/ModelCheckView.vue'),
+    meta: { requiresAuth: false, title: 'Model Check', titleKey: 'modelCheck.title' }
+  },
+  {
+    path: '/admin/model-check',
+    name: 'ModelCheckSettings',
+    component: () => import('@/views/admin/ModelCheckSettingsView.vue'),
+    meta: { requiresAuth: true, requiresAdmin: true, title: 'Model Check Settings', titleKey: 'modelCheck.adminNav' }
+  },
   {
     path: '/home',
     name: 'Home',
@@ -803,6 +816,16 @@ router.beforeEach(async (to, _from, next) => {
   // Check if route requires authentication
   const requiresAuth = to.meta.requiresAuth !== false // Default to true
   const requiresAdmin = to.meta.requiresAdmin === true
+
+  if (!import.meta.env.DEV && (to.path === '/model-check' || to.path === '/admin/model-check')) {
+    if (!appStore.publicSettingsLoaded) {
+      await appStore.fetchPublicSettings()
+    }
+    if (!isModelCheckEnabled()) {
+      next(authStore.isAuthenticated ? (authStore.isAdmin ? '/admin/dashboard' : '/dashboard') : '/home')
+      return
+    }
+  }
 
   if (to.path === '/setup') {
     try {

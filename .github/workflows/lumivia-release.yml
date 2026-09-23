@@ -44,8 +44,10 @@ jobs:
           go test -tags=unit ./internal/service -run 'TestWeeklyAdvance|TestMonthlyAdvance|TestValidateAndCheckLimits|TestLumivia|TestUpdateService' -count=1
           go test -tags=unit ./internal/handler -run '^TestMonthlyAdvanceHandler' -count=1
           go test -tags=unit ./internal/handler/dto -run '^TestUserSubscriptionFromServiceMonthlyResetAt$' -count=1
+          go test -tags=unit ./internal/handler/dto -run '^TestPublicSettingsInjectionPayload_SchemaDoesNotDrift$' -count=1
           go test -tags=unit ./internal/server -run '^TestAPIContracts$' -count=1
           go test -tags=unit ./internal/repository -run '^TestUserSubscriptionGetByIDForUpdateLocksRow$' -count=1
+          go test -tags=unit ./internal/pkg/modelcheckbridge ./internal/config ./internal/server/middleware ./internal/server/routes ./internal/service -run ModelCheck -count=1
       - uses: pnpm/action-setup@v6
         with:
           version: 9
@@ -58,11 +60,52 @@ jobs:
         working-directory: frontend
         run: |
           pnpm install --frozen-lockfile
-          pnpm exec vitest run src/views/user/__tests__/SubscriptionsView.advanceMonth.spec.ts
+          pnpm exec vitest run src/views/user/__tests__/SubscriptionsView.advanceMonth.spec.ts src/utils/__tests__/featureFlags.spec.ts
           pnpm run build
 
+  verify-model-check:
+    if: github.repository == 'goldenfishs/sub2api'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v6
+      - name: Verify companion Compose boundaries
+        run: python3 deploy/tests/model-check-compose-test.py
+      - uses: docker/setup-buildx-action@v3
+      - name: Install locked dependencies and build browser test image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: extensions/model-check/Dockerfile
+          target: test
+          platforms: linux/amd64
+          load: true
+          tags: lumivia-model-check:ci-test
+          cache-from: type=gha,scope=lumivia-model-check-amd64
+          cache-to: type=gha,mode=max,scope=lumivia-model-check-amd64
+      - name: Run all model-check tests with real offline Chromium rendering
+        run: |
+          docker run --rm --init --network none \
+            --read-only --cap-drop ALL --security-opt no-new-privileges:true \
+            --cpus 2 --memory 1g --memory-swap 1g --pids-limit 256 --shm-size 256m \
+            --tmpfs /tmp:rw,nosuid,nodev,noexec,size=268435456,mode=1777 \
+            lumivia-model-check:ci-test
+      - name: Build production companion image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: extensions/model-check/Dockerfile
+          target: runtime
+          platforms: linux/amd64
+          load: true
+          tags: lumivia-model-check:ci-runtime
+          build-args: COMMIT=${{ github.sha }}
+          cache-from: type=gha,scope=lumivia-model-check-amd64
+      - name: Verify production startup and persistent encrypted data
+        run: bash extensions/model-check/test/container-smoke.sh lumivia-model-check:ci-runtime
+
   publish:
-    needs: verify
+    needs: [verify, verify-model-check]
     if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     permissions:
@@ -98,6 +141,25 @@ jobs:
             org.opencontainers.image.revision=${{ github.sha }}
           cache-from: type=gha,scope=lumivia-amd64
           cache-to: type=gha,mode=max,scope=lumivia-amd64
+      - name: Publish model-check companion from the same commit
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: extensions/model-check/Dockerfile
+          target: runtime
+          platforms: linux/amd64
+          push: true
+          tags: |
+            ghcr.io/goldenfishs/sub2api-model-check:sha-${{ github.sha }}
+            ghcr.io/goldenfishs/sub2api-model-check:lumivia-latest
+          build-args: |
+            VERSION=${{ steps.version.outputs.value }}
+            COMMIT=${{ github.sha }}
+          labels: |
+            org.opencontainers.image.source=https://github.com/goldenfishs/sub2api
+            org.opencontainers.image.revision=${{ github.sha }}
+          cache-from: type=gha,scope=lumivia-model-check-amd64
+          cache-to: type=gha,mode=max,scope=lumivia-model-check-amd64
       - name: Export deployable image archive
         env:
           IMAGE: ghcr.io/goldenfishs/sub2api:sha-${{ github.sha }}
@@ -112,5 +174,21 @@ jobs:
           path: |
             /tmp/lumivia-image.tar.gz
             /tmp/lumivia-image.tar.gz.sha256
+          compression-level: 0
+          retention-days: 30
+      - name: Export deployable model-check image archive
+        env:
+          IMAGE: ghcr.io/goldenfishs/sub2api-model-check:sha-${{ github.sha }}
+        run: |
+          docker pull "$IMAGE"
+          docker save "$IMAGE" | gzip > /tmp/lumivia-model-check-image.tar.gz
+          cd /tmp
+          sha256sum lumivia-model-check-image.tar.gz > lumivia-model-check-image.tar.gz.sha256
+      - uses: actions/upload-artifact@v7
+        with:
+          name: lumivia-model-check-image-${{ github.sha }}
+          path: |
+            /tmp/lumivia-model-check-image.tar.gz
+            /tmp/lumivia-model-check-image.tar.gz.sha256
           compression-level: 0
           retention-days: 30

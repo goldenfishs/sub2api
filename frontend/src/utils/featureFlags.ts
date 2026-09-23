@@ -114,6 +114,11 @@ export const FeatureFlags = {
     mode: 'opt-in',
     label: 'Model Plaza',
   }),
+  modelCheck: defineFlag({
+    key: 'model_check_enabled',
+    mode: 'opt-in',
+    label: 'Model Check',
+  }),
   pluginManagement: defineFlag({
     key: 'plugin_management_enabled',
     mode: 'opt-in',
@@ -176,6 +181,11 @@ export function makeSidebarFlag(flag: FeatureFlagDefinition): () => boolean {
 /** True when channel monitor feature flag is enabled. */
 export function isChannelMonitorRouteEnabled(): boolean {
   return isFeatureFlagEnabled(FeatureFlags.channelMonitor)
+}
+
+/** Local Vite previews run the companion directly; production follows the backend. */
+export function isModelCheckEnabled(): boolean {
+  return import.meta.env.DEV || isFeatureFlagEnabled(FeatureFlags.modelCheck)
 }
 
 export type ChannelMonitorMode = 'v1' | 'v2'

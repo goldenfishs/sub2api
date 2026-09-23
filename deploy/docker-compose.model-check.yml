@@ -1,0 +1,53 @@
+# Add this file LAST to the existing production Compose file list. It only
+# enables the application bridge and adds the companion; existing application
+# images, databases, Redis, published ports and volumes remain operator-owned.
+services:
+  sub2api:
+    environment:
+      MODEL_CHECK_ENABLED: "true"
+      MODEL_CHECK_UPSTREAM: http://127.0.0.1:8096
+      MODEL_CHECK_BRIDGE_SECRET: ${MODEL_CHECK_BRIDGE_SECRET:?set a dedicated random bridge secret}
+
+  model-check:
+    image: ${MODEL_CHECK_IMAGE:?set the model-check image to the same sha tag as sub2api}
+    restart: unless-stopped
+    init: true
+    user: "10001:10001"
+    network_mode: service:sub2api
+    depends_on:
+      sub2api:
+        condition: service_healthy
+        restart: true
+    environment:
+      NODE_ENV: production
+      MODEL_CHECK_HOST: 127.0.0.1
+      MODEL_CHECK_PORT: "8096"
+      MODEL_CHECK_DATA_DIR: /app/data
+      MODEL_CHECK_DEMO: "0"
+      SUB2API_BACKEND: http://127.0.0.1:8080
+      MODEL_CHECK_SITE_API_BASE: http://127.0.0.1:8080/v1
+      MODEL_CHECK_BRIDGE_SECRET: ${MODEL_CHECK_BRIDGE_SECRET:?set a dedicated random bridge secret}
+      TZ: ${TZ:-Asia/Shanghai}
+    volumes:
+      - model_check_data:/app/data
+    read_only: true
+    tmpfs:
+      - /tmp:rw,nosuid,nodev,noexec,size=268435456,mode=1777
+    shm_size: 256m
+    cpus: ${MODEL_CHECK_CPUS:-2.0}
+    mem_limit: ${MODEL_CHECK_MEMORY:-1g}
+    memswap_limit: ${MODEL_CHECK_MEMORY:-1g}
+    pids_limit: 256
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    stop_grace_period: 35s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+volumes:
+  model_check_data:
