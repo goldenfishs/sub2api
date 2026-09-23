@@ -31,6 +31,18 @@ const routes: RouteRecordRaw[] = [
 
   // ==================== Public Routes ====================
   {
+    path: '/model-check',
+    name: 'ModelCheck',
+    component: () => import('@/views/ModelCheckView.vue'),
+    meta: { requiresAuth: false, title: 'Model Check', titleKey: 'modelCheck.title' }
+  },
+  {
+    path: '/admin/model-check',
+    name: 'ModelCheckSettings',
+    component: () => import('@/views/admin/ModelCheckSettingsView.vue'),
+    meta: { requiresAuth: true, requiresAdmin: true, title: 'Model Check Settings', titleKey: 'modelCheck.adminNav' }
+  },
+  {
     path: '/home',
     name: 'Home',
     component: () => import('@/views/HomeView.vue'),

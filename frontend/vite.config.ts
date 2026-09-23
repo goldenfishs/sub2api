@@ -158,6 +158,10 @@ export default defineConfig(({ mode }) => {
       host: '0.0.0.0',
       port: devPort,
       proxy: {
+        '/api/v1/model-check': {
+          target: env.VITE_MODEL_CHECK_TARGET || 'http://127.0.0.1:8096',
+          changeOrigin: true
+        },
         '/api': {
           target: backendUrl,
           changeOrigin: true
