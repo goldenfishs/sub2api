@@ -13,7 +13,8 @@ export class Store {
       CREATE INDEX IF NOT EXISTS runs_channel_created ON runs(channel_id,created_at DESC);
       CREATE INDEX IF NOT EXISTS runs_owner_created ON runs(owner_id,created_at DESC);
       CREATE TABLE IF NOT EXISTS api_requests (request_key TEXT PRIMARY KEY, fingerprint TEXT NOT NULL, run_id TEXT NOT NULL, created_at INTEGER NOT NULL);
-      CREATE INDEX IF NOT EXISTS api_requests_created ON api_requests(created_at);`);
+      CREATE INDEX IF NOT EXISTS api_requests_created ON api_requests(created_at);
+      CREATE TABLE IF NOT EXISTS quality_reviews (id INTEGER PRIMARY KEY, run_id TEXT NOT NULL REFERENCES runs(id) ON DELETE CASCADE, verdict TEXT NOT NULL, reviewer_id INTEGER, auth_method TEXT NOT NULL, reviewed_at INTEGER NOT NULL);`);
     this.db.prepare('DELETE FROM api_requests WHERE created_at<?').run(Date.now() - requestRetentionMs);
     // In-flight secrets exist only in memory. Never replay a potentially billed call after restart.
     for (const row of this.db.prepare("SELECT id FROM runs WHERE status IN ('queued','generating','rendering')").all()) this.updateRun(row.id, { status: 'failed', error: 'service_restarted', finished_at: Date.now() });
@@ -31,7 +32,27 @@ export class Store {
     return this.channel(id);
   }
   setBaseline(channel, run) { this.db.prepare('UPDATE channels SET baseline_id=? WHERE id=?').run(run, channel); }
+  reviewRun(id, verdict, reviewer) {
+    const reviewed_at = Date.now();
+    this.db.exec('BEGIN IMMEDIATE');
+    try {
+      this.db.prepare('INSERT INTO quality_reviews(run_id,verdict,reviewer_id,auth_method,reviewed_at) VALUES(?,?,?,?,?)').run(id, verdict, reviewer.id, reviewer.auth_method || 'session', reviewed_at);
+      const result = this.updateRun(id, { quality_review: verdict === 'clear' ? null : { verdict, reviewed_at } });
+      if (verdict === 'degraded') this.db.prepare('UPDATE channels SET baseline_id=NULL WHERE baseline_id=?').run(id);
+      this.db.exec('COMMIT');
+      return result;
+    } catch (error) { this.db.exec('ROLLBACK'); throw error; }
+  }
   setNextRun(id, time) { this.db.prepare('UPDATE channels SET next_run=? WHERE id=?').run(time, id); }
+  deleteChannel(id) {
+    this.db.exec('BEGIN IMMEDIATE');
+    try {
+      this.db.prepare('DELETE FROM runs WHERE channel_id=?').run(id);
+      this.db.prepare('DELETE FROM channels WHERE id=?').run(id);
+      // Preserve 24-hour API retry tombstones even after their records are removed.
+      this.db.exec('COMMIT');
+    } catch (error) { this.db.exec('ROLLBACK'); throw error; }
+  }
   createRun({ owner_id = 0, channel_id = null, source = 'self', ...data }, request = null) {
     const id = randomUUID(); const created_at = Date.now();
     this.db.exec('BEGIN IMMEDIATE');
@@ -105,12 +126,14 @@ export function publicRun(run, detail = false) {
     total_ms: run.total_ms, usage: run.usage, tps: Number.isFinite(tps) ? tps : null, assessment: run.assessment, error: run.error,
     label: run.label, prompt_hash: run.prompt_hash, prompt_version: run.prompt_version,
     thumbnail: run.thumbnail ? `data:image/webp;base64,${run.thumbnail}` : null,
+    quality_review: run.quality_review || null,
   };
   if (detail) Object.assign(result, { prompt: run.prompt, seed: run.seed, conditions: run.conditions, html: run.html, metrics: run.metrics, image: run.image ? `data:image/webp;base64,${run.image}` : null, max_tokens: run.max_tokens });
   return result;
 }
 
 export function publicChannel(channel, runs = [], admin = false) {
+  const preview = runs.find(run => finished.includes(run.status) && run.image && run.thumbnail);
   const matching = runs.filter(run =>
     ['model', 'topic', 'reasoning', 'protocol', 'max_tokens'].every(field => run[field] === channel[field]) &&
     (run.group_id ?? null) === (channel.group_id ?? null) &&
@@ -121,7 +144,7 @@ export function publicChannel(channel, runs = [], admin = false) {
     protocol: channel.protocol, max_tokens: channel.max_tokens, enabled: channel.enabled, public: channel.public,
     key_source: channel.key_source || null, group_id: channel.group_id ?? null, group_name: channel.group_name || null,
     interval_minutes: channel.interval_minutes, next_run: channel.next_run, baseline_id: channel.baseline_id,
-    demo: !!channel.demo, latest: runs.length ? publicRun(runs[0]) : null, statistics: summarizeRuns(channel.demo ? runs : matching),
+    demo: !!channel.demo, latest: runs.length ? publicRun(runs[0]) : null, preview: preview ? publicRun(preview) : null, statistics: summarizeRuns(channel.demo ? runs : matching),
     history: runs.slice(0, 24).reverse().map(run => ({ id: run.id, status: run.status, score: run.assessment?.score ?? null, created_at: run.created_at })),
   };
   if (admin) Object.assign(result, { base_url: channel.base_url, key_source: channel.key_source, key_id: channel.key_id, has_key: !!channel.encrypted_key, seed: channel.seed });

@@ -23,6 +23,7 @@ export interface CheckRun extends CheckOptions {
   tps?: number | null
   total_ms?: number
   usage?: { input_tokens: number | null; output_tokens: number | null; cached_tokens: number | null } | null
+  quality_review?: { verdict: 'normal' | 'degraded'; reviewed_at: number } | null
   assessment?: { score: number; verdict: string; delta: number | null; reasons: string[]; dimensions: { id: string; score: number; max: number }[]; semantic_review: string; method: string }
   label?: string
   thumbnail?: string | null
@@ -58,6 +59,7 @@ export interface CheckChannel extends CheckOptions {
   baseline_id: string | null
   demo: boolean
   latest: CheckRun | null
+  preview: CheckRun | null
   statistics?: CheckStatistics
   group_id?: number | null
   group_name?: string | null
@@ -102,7 +104,9 @@ export const modelCheckAPI = {
   save: async (form: CheckChannelForm, id?: string) => (id
     ? await apiClient.put<CheckChannel>(`${base}/admin/channels/${id}`, form)
     : await apiClient.post<CheckChannel>(`${base}/admin/channels`, form)).data,
+  deleteChannel: async (id: string) => (await apiClient.delete(`${base}/admin/channels/${id}`)).data,
   runChannel: async (id: string) => (await apiClient.post<CheckRun>(`${base}/admin/channels/${id}/run`, {})).data,
+  review: async (id: string, verdict: 'normal' | 'degraded' | 'clear') => (await apiClient.post<CheckRun>(`${base}/admin/runs/${id}/review`, { verdict })).data,
   baseline: async (id: string, run_id: string) => (await apiClient.post(`${base}/admin/channels/${id}/baseline`, { run_id })).data,
 }
 

@@ -60,6 +60,74 @@ async function harness(t, overrides = {}) {
   return { app, auth, channel, call, directory, generated };
 }
 
+test('deleting a monitor requires an administrator session and removes only its records while keeping retry tombstones', async t => {
+  const { call, app, channel, generated } = await harness(t);
+  const path = '/admin/channels/' + channel.id;
+  const request = { method: 'POST', headers: { 'Idempotency-Key': 'fixture-deleted-monitor' }, body: { channel_id: channel.id, wait_seconds: 2 } };
+  const result = await call('/admin/tests', request);
+  assert.equal(result.status, 200);
+  app.store.setBaseline(channel.id, result.data.id);
+  const personal = app.store.createRun({ owner_id: 1, source: 'self', model: 'private-personal-test' });
+  app.store.updateRun(personal.id, { status: 'normal', ...artifact });
+  const other = app.store.saveChannel({ ...channel, id: undefined, name: 'Other monitor' }, 1, channel.encrypted_key);
+  const otherRun = app.store.createRun({ channel_id: other.id, owner_id: 1, source: 'manual', model: channel.model });
+  app.store.updateRun(otherRun.id, { status: 'normal', ...artifact });
+  assert.equal((await call(path, { method: 'DELETE', key: null })).status, 401);
+  assert.equal((await call(path, { method: 'DELETE' })).status, 401, 'global API key cannot delete a monitor');
+  assert.equal((await call(path, { method: 'DELETE', key: null, bearer: 'fixture-user' })).status, 403);
+  const deleted = await call(path, { method: 'DELETE', key: null, bearer: 'fixture-admin' });
+  assert.equal(deleted.status, 200);
+  assert.deepEqual(deleted.data, { deleted: true, id: channel.id });
+  assert.equal(app.store.channel(channel.id), null);
+  assert.equal(app.store.run(result.data.id), null);
+  assert.equal(app.store.db.prepare('SELECT run_id FROM api_requests WHERE run_id=?').get(result.data.id).run_id, result.data.id);
+  assert.equal(app.store.listRuns({ channel: channel.id }).length, 0);
+  assert.ok(app.store.run(personal.id));
+  assert.ok(app.store.run(otherRun.id));
+  assert.ok(app.store.channel(other.id));
+  assert.equal((await call('/admin/tests', request)).status, 404);
+  assert.equal(generated.length, 1, 'retrying a deleted monitor never creates another billed run');
+  assert.equal((await call(path, { method: 'DELETE', key: null, bearer: 'fixture-admin' })).status, 404);
+});
+
+test('deleting running or queued monitors is rejected without changing their jobs', async t => {
+  let release; const gate = new Promise(resolve => { release = resolve; });
+  const { call, app, channel } = await harness(t, { beforeClose: release, generate: async () => { await gate; return { html: artifact.html, usage: null }; } });
+  const monitors = [channel, ...Array.from({ length: 2 }, (_, index) => app.store.saveChannel({ ...channel, id: undefined, name: 'Busy monitor ' + index }, 1, channel.encrypted_key))];
+  for (const monitor of monitors) {
+    assert.equal((await call('/admin/tests', { method: 'POST', body: { channel_id: monitor.id } })).status, 202);
+  }
+  assert.equal(app.store.listRuns({ channel: monitors[2].id })[0].status, 'queued');
+  for (const monitor of monitors) {
+    const result = await call('/admin/channels/' + monitor.id, { method: 'DELETE', key: null, bearer: 'fixture-admin' });
+    assert.equal(result.status, 409);
+    assert.equal(result.reason, 'already_running');
+    assert.ok(app.store.channel(monitor.id));
+    assert.equal(app.store.listRuns({ channel: monitor.id }).length, 1);
+  }
+  release();
+});
+
+test('monitor previews retain the latest finished image during failures and new jobs without exposing full artifacts', async t => {
+  const { call, app, channel } = await harness(t);
+  const previous = app.store.createRun({ channel_id: channel.id, owner_id: 1, model: channel.model });
+  app.store.updateRun(previous.id, { status: 'review', ...artifact, finished_at: Date.now() });
+  const failed = app.store.createRun({ channel_id: channel.id, owner_id: 1, model: channel.model });
+  app.store.updateRun(failed.id, { status: 'failed', error: 'upstream_timeout' });
+  const current = app.store.createRun({ channel_id: channel.id, owner_id: 1, model: channel.model });
+  const monitor = (await call('/admin/channels')).data.find(item => item.id === channel.id);
+  assert.equal(monitor.latest.id, current.id);
+  assert.equal(monitor.preview.id, previous.id);
+  assert.equal(monitor.preview.status, 'review');
+  assert.equal(monitor.preview.created_at, previous.created_at);
+  assert.equal(monitor.preview.thumbnail, 'data:image/webp;base64,' + artifact.thumbnail);
+  assert.equal(monitor.preview.image, undefined);
+  assert.equal(monitor.preview.html, undefined);
+  assert.equal((await call('/overview', { key: null })).data.channels.length, 0, 'private previews remain private');
+  app.store.updateRun(current.id, { status: 'normal', ...artifact });
+  assert.equal((await call('/admin/channels')).data[0].preview.id, current.id);
+});
+
 test('Admin API Keys use the existing verifier on every call and never fall back to another identity', async t => {
   const { call, auth } = await harness(t);
   assert.equal((await call('/admin/channels', { key: null })).status, 401);

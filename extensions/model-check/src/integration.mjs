@@ -36,13 +36,17 @@ export function apiRun(run, detail = true) {
 }
 
 export function waitForResult(store, id, waitMs, response) {
-  if (!waitMs || isFinished(store.run(id)) || response.destroyed) return Promise.resolve(store.run(id));
+  const initial = store.run(id);
+  if (!waitMs || !initial || isFinished(initial) || response.destroyed) return Promise.resolve(initial);
   return new Promise(resolve => {
     const finish = () => {
       clearInterval(interval); clearTimeout(timeout); response.off('close', finish);
       resolve(store.run(id));
     };
-    const interval = setInterval(() => { if (isFinished(store.run(id))) finish(); }, 100);
+    const interval = setInterval(() => {
+      const run = store.run(id);
+      if (!run || isFinished(run)) finish();
+    }, 100);
     const timeout = setTimeout(finish, waitMs);
     response.once('close', finish);
   });
