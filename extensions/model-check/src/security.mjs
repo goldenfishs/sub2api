@@ -104,7 +104,7 @@ export async function resolveEndpoint(base, route, trustedBase = '', resolver = 
   return { url, address: addresses[0] };
 }
 
-export async function requestJSON(endpoint, { method = 'POST', key = '', body, timeout = 180_000, headers = {} } = {}) {
+export async function requestJSON(endpoint, { method = 'POST', key = '', body, timeout = 600_000, headers = {} } = {}) {
   const { url, address } = endpoint;
   const payload = body === undefined ? null : JSON.stringify(body);
   return new Promise((resolve, reject) => {
