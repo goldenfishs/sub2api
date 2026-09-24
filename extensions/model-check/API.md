@@ -15,14 +15,31 @@
 | 方法 | 路径 | 用途 |
 | --- | --- | --- |
 | GET | `/admin/channels` | 获取管理员已配置的监测任务、任务 ID 和参数 |
+| DELETE | `/admin/channels/任务ID` | 删除监测任务及其检测记录；仅支持管理员 JWT，详见下文 |
 | POST | `/admin/tests` | 提交一次检测，复用监测任务的模型 Key |
 | GET | `/admin/runs?channel_id=任务ID&limit=30` | 获取检测记录；两个查询参数均可省略，`limit` 为 1–60 |
 | GET | `/admin/runs/latest?channel_id=任务ID` | 获取最新完成记录，包含判定和完整图片；失败记录也会如实返回 |
 | GET | `/admin/runs/结果ID` | 获取指定记录，可用于轮询进度 |
 | GET | `/admin/runs/结果ID/image` | 直接返回完整 WebP 图片，`Content-Type: image/webp` |
 | GET | `/admin/runs/latest/image?channel_id=任务ID` | 直接获取最新完成记录的图片；最新检测失败时不会用旧图片代替 |
+| POST | `/admin/runs/结果ID/review` | 管理员人工复核作品质量；JSON 为 `{"verdict":"normal"}` / `degraded` / `clear` |
 
-这些接口均要求管理员鉴权，包括公开记录的管理员接口和图片接口。图片请求也要带相同请求头。能读取管理员监测记录及公开作品；用户个人自测的私有权限仍按所有者判断。单次 API 检测是否公开，遵循所选监测任务的公开设置。
+这些接口均要求管理员鉴权，包括公开记录的管理员接口和图片接口。图片请求也要带相同请求头。删除任务只接受管理员 JWT，其余上表接口支持全局管理员 API Key 或管理员 JWT。能读取管理员监测记录及公开作品；用户个人自测的私有权限仍按所有者判断。单次 API 检测是否公开，遵循所选监测任务的公开设置。
+
+### 监测任务预览
+
+`GET /admin/channels` 每项包含 `latest`（最新检测，可能仍在执行或已失败）和 `preview`（最近一条已完成且有图片的记录摘要，无图时为 `null`）。`preview.thumbnail` 是 WebP 缩略图 Data URI，同时包含 `id`、`status`、`created_at`、`finished_at` 等记录字段，不包含完整 `image` 或 `html`。显示预览时请同时标注这条记录的时间，不要把上一次图片当作当前正在执行或失败的检测结果。
+
+### 删除监测任务
+
+```sh
+curl --request DELETE 'http://localhost:3000/api/v1/model-check/admin/channels/任务ID' \
+  -H 'Authorization: Bearer 管理员JWT'
+```
+
+无请求体。成功返回 HTTP 200：`{ "code": 0, "data": { "deleted": true, "id": "任务ID" } }`。删除将立即停止后续调度，并在同一事务中移除该任务的配置、加密模型 Key、所有检测记录和基准图片；个人自测以及其他任务不受影响。运行中或排队中的任务返回 `409 already_running`，需要等待本次检测结束后再删除。任务不存在或已经删除时返回 `404 not_found`。仅提供 `x-api-key` 不能删除任务，需使用管理员登录 JWT。
+
+删除不清除 24 小时内的 API 幂等记录，防止重复计费；已删除的任务不能继续提交检测，原 `channel_id` 返回 `404 not_found`。
 
 ## 发起一次检测
 
@@ -122,4 +139,14 @@ curl --fail 'http://localhost:3000/api/v1/model-check/admin/runs/结果ID/image'
 | 429 | `queue_full` | 执行与等待队列已满 |
 | 503 | `account_service_unavailable` | 主服务不可用，无法确认管理员身份 |
 
-画面分数是规则初筛，不是模型身份认证或真实智商分数；接口或渲染失败会记为 `failed`，不会被当成“降智”。
+画面分数是基础规则初筛，不是模型身份认证或真实智商分数；接口或渲染失败会记为 `failed`，不会被当成“降智”。`normal` 只表示基础检查通过，质量需要单独复核。
+
+## 作品质量复核
+
+`POST /admin/runs/{id}/review` 支持管理员 JWT 或全局管理员 API Key，仅适用于已完成且有图片的监测作品，不支持个人自测。请求体只接受 `verdict`：`normal` 表示人工确认正常，`degraded` 表示人工标记退步，`clear` 撤销当前复核。成功响应返回完整 `apiRun`，不会重新调用模型。
+
+结果新增 `quality_review: { verdict: "normal" | "degraded", reviewed_at: 毫秒时间戳 } | null`，与 `status` / `assessment` 的基础规则结果分别保存。null 表示质量未复核，不能算作质量通过。修改和撤销保留服务端审计记录，公开响应不包含审核人身份。将基准作品标记退步会清除该基准。
+
+非法复核参数返回 `400 invalid_review`；执行中、失败、无图或非监测作品返回 `409 result_not_reviewable`（不可读记录仍返回 404）。未复核作品不会被自动判为质量正常。
+
+管理员详情页可以从历史记录设置符合当前检测条件的基准。提示词、模型、推理强度、输出上限、协议、分组和密钥来源必须匹配，才计算规则分差；不同参数的作品只能作视觉参考。基础规则满分不代表角色、题意与动作均正确。

@@ -4,14 +4,14 @@
       <div v-if="error" class="mc-error" role="alert">{{ error }}<button class="mc-btn mc-btn-quiet" @click="load">{{ t('modelCheck.retry') }}</button></div>
       <div v-else-if="!run" class="mc-loading"><span class="mc-spinner" />{{ t('modelCheck.status.queued') }}</div>
       <template v-else>
-        <div class="mc-detail-top"><div><span :class="['mc-status', `is-${run.status}`]">{{ t(`modelCheck.status.${run.status}`) }}</span><strong>{{ run.model }}</strong><CheckGroupBadge :group-name="run.group_name" :group-id="run.group_id" :key-source="run.key_source" :demo="run.source === 'demo'" /><span class="mc-dim">{{ t(`modelCheck.topic.${run.topic}`) }}</span></div><span v-if="run.source === 'demo'" class="mc-demo-tag">{{ t('modelCheck.demo') }}</span></div>
+        <div class="mc-detail-top"><div><span :class="['mc-status', `is-${run.status}`]">{{ t(`modelCheck.status.${run.status}`) }}</span><CheckQualityBadge v-if="run.assessment" :review="run.quality_review" /><strong>{{ run.model }}</strong><CheckGroupBadge :group-name="run.group_name" :group-id="run.group_id" :key-source="run.key_source" :demo="run.source === 'demo'" /><span class="mc-dim">{{ t(`modelCheck.topic.${run.topic}`) }}</span></div><span v-if="run.source === 'demo'" class="mc-demo-tag">{{ t('modelCheck.demo') }}</span></div>
         <div v-if="isCheckRunning(run.status)" class="mc-processing" aria-live="polite"><div class="mc-processing-orbit"><Icon name="sparkles" size="xl" /></div><h3>{{ t('modelCheck.processing') }}</h3><p>{{ t(`modelCheck.status.${run.status}`) }}</p><small>{{ t('modelCheck.processingHint') }}</small></div>
         <div v-else-if="run.status === 'failed'" class="mc-failed-preview"><Icon name="exclamationCircle" size="xl" /><h3>{{ t('modelCheck.status.failed') }}</h3><p>{{ translatedError(run.error || 'test_failed') }}</p></div>
         <div v-else class="mc-detail-grid">
           <div>
             <div v-if="baseline && compare" class="mc-compare-grid"><figure><img :src="baseline.image || baseline.thumbnail || ''" :alt="t('modelCheck.baseline')" /><figcaption>{{ t('modelCheck.baseline') }} · {{ baseline.assessment?.score }}</figcaption></figure><figure><img :src="run.image || run.thumbnail || ''" :alt="t('modelCheck.current')" /><figcaption>{{ t('modelCheck.current') }} · {{ run.assessment?.score }}</figcaption></figure></div>
             <div v-else class="mc-artwork-stage"><iframe v-if="playing && run.html" :srcdoc="run.html" sandbox="" referrerpolicy="no-referrer" :title="`${run.model} · ${t('modelCheck.preview')}`" /><img v-else :src="run.image || run.thumbnail || ''" :alt="`${run.model} · ${t(`modelCheck.topic.${run.topic}`)}`" /></div>
-            <p v-if="baseline && compare && baseline.prompt_hash !== run.prompt_hash" class="mc-field-note">{{ t('modelCheck.differentBrief') }}</p>
+            <p v-if="baseline && compare && !comparable" class="mc-field-note">{{ t('modelCheck.differentBrief') }}</p>
             <div class="mc-stage-toolbar"><button class="mc-btn mc-btn-quiet" @click="playing = !playing; compare = false"><Icon :name="playing ? 'eye' : 'play'" size="sm" />{{ playing ? t('modelCheck.screenshot') : t('modelCheck.animation') }}</button><button v-if="baseline" class="mc-btn mc-btn-quiet" @click="compare = !compare">{{ t('modelCheck.compare') }}</button><button class="mc-btn mc-btn-quiet" @click="download"><Icon name="download" size="sm" />{{ t('modelCheck.download') }}</button></div>
           </div>
           <aside v-if="run.assessment" class="mc-score-panel"><span class="mc-overline">{{ t('modelCheck.visualScore') }}</span><div class="mc-score-number">{{ run.assessment.score }}<small>/ 100</small></div><span v-if="run.assessment.delta !== null" class="mc-delta">{{ t('modelCheck.delta', { delta: run.assessment.delta, value: `${run.assessment.delta > 0 ? '+' : ''}${run.assessment.delta}` }) }}</span>
@@ -19,6 +19,20 @@
           </aside>
         </div>
         <template v-if="!isCheckRunning(run.status)">
+          <div v-if="run.assessment" class="mc-assessment mc-quality-review">
+            <strong>{{ t('modelCheck.qualityReview') }}</strong>
+            <p>{{ t('modelCheck.qualityReviewHint') }}</p>
+            <CheckQualityBadge :review="run.quality_review" />
+            <small v-if="run.quality_review">{{ new Date(run.quality_review.reviewed_at).toLocaleString(locale) }}</small>
+            <div v-if="auth.isAdmin && run.channel_id" class="mc-stage-toolbar">
+              <button class="mc-btn mc-btn-outline" :disabled="reviewing || run.quality_review?.verdict === 'normal'" @click="reviewQuality('normal')">{{ t('modelCheck.confirmQuality') }}</button>
+              <button class="mc-btn mc-btn-outline" :disabled="reviewing || run.quality_review?.verdict === 'degraded'" @click="reviewQuality('degraded')">{{ t('modelCheck.markDegraded') }}</button>
+              <button v-if="run.quality_review" class="mc-btn mc-btn-quiet" :disabled="reviewing" @click="reviewQuality('clear')">{{ t('modelCheck.clearQuality') }}</button>
+              <button v-if="run.status === 'normal' && run.quality_review?.verdict !== 'degraded' && baselineId !== run.id" class="mc-btn mc-btn-quiet" :disabled="reviewing" @click="setBaseline">{{ t('modelCheck.setBaseline') }}</button>
+            </div>
+            <p v-if="reviewError" class="mc-error" role="alert">{{ reviewError }}</p>
+            <p v-if="reviewNotice" role="status">{{ reviewNotice }}</p>
+          </div>
           <div v-if="run.assessment" class="mc-assessment"><strong>{{ t('modelCheck.assessment') }}</strong><ul v-if="run.assessment.reasons.length"><li v-for="reason in run.assessment.reasons" :key="reason">{{ t(`modelCheck.reasons.${reason}`) }}</li></ul><p v-else>{{ t('modelCheck.normalNote') }}</p><small>{{ t('modelCheck.scoreNote') }}</small></div>
           <div class="mc-facts">
             <div><span>{{ t('modelCheck.generationTime') }}</span><strong>{{ run.generation_ms == null ? '—' : t('modelCheck.seconds', { value: (run.generation_ms / 1000).toFixed(1) }) }}</strong></div>
@@ -40,10 +54,15 @@ import { useI18n } from 'vue-i18n'
 import BaseDialog from '@/components/common/BaseDialog.vue'
 import Icon from '@/components/icons/Icon.vue'
 import CheckGroupBadge from './CheckGroupBadge.vue'
+import CheckQualityBadge from './CheckQualityBadge.vue'
+import { useAuthStore } from '@/stores/auth'
 import { modelCheckAPI, isCheckRunning, checkErrorCode, type CheckRun } from '@/api/modelCheck'
 const props = defineProps<{ runId: string | null; baselineId?: string | null }>()
 defineEmits<{ close: [] }>()
 const { t, te, locale } = useI18n()
+const auth = useAuthStore()
+const reviewing = ref(false), reviewError = ref(''), reviewNotice = ref('')
+const comparable = computed(() => !!run.value && !!baseline.value && ['prompt_hash', 'model', 'reasoning', 'max_tokens', 'protocol', 'group_id', 'key_source'].every(key => run.value?.[key as keyof CheckRun] === baseline.value?.[key as keyof CheckRun]))
 const run = ref<CheckRun | null>(null), baseline = ref<CheckRun | null>(null), error = ref(''), playing = ref(false), compare = ref(false)
 const tps = computed(() => {
   const value = run.value?.tps
@@ -64,7 +83,7 @@ async function load() {
   } catch (e) { if (current === version) error.value = translatedError(checkErrorCode(e)) }
 }
 watch(() => [props.runId, props.baselineId], async () => {
-  version++; clearTimeout(timer); run.value = null; baseline.value = null; error.value = ''; playing.value = false; compare.value = false
+  version++; clearTimeout(timer); reviewError.value = ''; reviewNotice.value = ''; run.value = null; baseline.value = null; error.value = ''; playing.value = false; compare.value = false
   const current = version
   void load()
   if (props.baselineId && props.baselineId !== props.runId) {
@@ -72,6 +91,26 @@ watch(() => [props.runId, props.baselineId], async () => {
   }
 }, { immediate: true })
 onUnmounted(() => { version++; clearTimeout(timer) })
+async function reviewQuality(verdict: 'normal' | 'degraded' | 'clear') {
+  if (!run.value || reviewing.value) return
+  const current = version
+  reviewing.value = true; reviewError.value = ''; reviewNotice.value = ''
+  try {
+    const result = await modelCheckAPI.review(run.value.id, verdict)
+    if (current === version) { run.value = result; reviewNotice.value = t('modelCheck.qualitySaved') }
+  } catch (e) { if (current === version) reviewError.value = translatedError(checkErrorCode(e)) }
+  finally { reviewing.value = false }
+}
+async function setBaseline() {
+  if (!run.value?.channel_id || reviewing.value) return
+  const current = version
+  reviewing.value = true; reviewError.value = ''; reviewNotice.value = ''
+  try {
+    await modelCheckAPI.baseline(run.value.channel_id, run.value.id)
+    if (current === version) reviewNotice.value = t('modelCheck.baselineSet')
+  } catch (e) { if (current === version) reviewError.value = translatedError(checkErrorCode(e)) }
+  finally { reviewing.value = false }
+}
 function download() {
   if (!run.value?.html) return
   const url = URL.createObjectURL(new Blob([run.value.html], { type: 'text/html;charset=utf-8' }))

@@ -233,8 +233,17 @@ export function createService(config, dependencies = {}) {
       // Machine-facing API: use the existing global Admin API Key (x-api-key),
       // or an administrator's current browser session. All reads recheck auth.
       const apiRunMatch = route.match(/^\/admin\/runs\/([a-f0-9-]{36}|latest)(\/image)?$/);
-      if (route === '/admin/tests' || route === '/admin/runs' || apiRunMatch || (route === '/admin/channels' && req.method === 'GET')) {
+      const reviewMatch = route.match(/^\/admin\/runs\/([a-f0-9-]{36})\/review$/);
+      if (route === '/admin/tests' || route === '/admin/runs' || apiRunMatch || reviewMatch || (route === '/admin/channels' && req.method === 'GET')) {
         const admin = await authenticateAdmin(req);
+        if (reviewMatch && req.method === 'POST') {
+          const input = await readBody(req);
+          if (Object.keys(input).some(key => key !== 'verdict') || !['normal', 'degraded', 'clear'].includes(input.verdict)) throw new CheckError('invalid_review');
+          const run = store.run(reviewMatch[1]);
+          if (!store.canRead(run, admin)) throw new CheckError('not_found', 404);
+          if (!run.channel_id || !['normal', 'review'].includes(run.status) || !run.image) throw new CheckError('result_not_reviewable', 409);
+          response(res, 200, apiRun(store.reviewRun(run.id, input.verdict, admin))); return;
+        }
         if (route === '/admin/channels' && req.method === 'GET') {
           response(res, 200, store.channels().filter(c => !c.demo).map(c => publicChannel(c, store.listRuns({ channel: c.id, limit: 60 }), true))); return;
         }
@@ -250,6 +259,7 @@ export function createService(config, dependencies = {}) {
           if (!accepted) throw new CheckError('result_expired', 410);
           const run = await waitForResult(store, accepted.id, prepared.waitMs, res);
           if (res.destroyed) return;
+          if (!run) throw new CheckError('result_expired', 410);
           const result = apiRun(run);
           res.setHeader('Location', result.result_url);
           if (!result.completed) res.setHeader('Retry-After', '2');
@@ -298,11 +308,15 @@ export function createService(config, dependencies = {}) {
       if (!channelMatch) throw new CheckError('not_found', 404);
       const id = channelMatch[1]; const action = channelMatch[2]; const previous = id ? store.channel(id) : null;
       if (id && (!previous || previous.demo)) throw new CheckError('not_found', 404);
+      if (id && !action && req.method === 'DELETE') {
+        if (busyChannels.has(id)) throw new CheckError('already_running', 409);
+        store.deleteChannel(id); response(res, 200, { deleted: true, id }); return;
+      }
       if (action === 'run' && req.method === 'POST') { response(res, 202, publicRun(channelRun(previous, 'manual'))); return; }
       if (action === 'baseline' && req.method === 'POST') {
         const input = await readBody(req); const run = store.run(input.run_id);
         const expected = run && makePrompt(previous.topic, previous.topic === 'creative' ? run.seed : previous.seed);
-        if (!run || run.channel_id !== id || run.status !== 'normal' || run.topic !== previous.topic || run.prompt_hash !== expected.prompt_hash || run.model !== previous.model || run.reasoning !== previous.reasoning || run.max_tokens !== previous.max_tokens || run.protocol !== previous.protocol || run.group_id !== previous.group_id || run.key_source !== previous.key_source) throw new CheckError('invalid_baseline');
+        if (!run || run.channel_id !== id || run.status !== 'normal' || run.quality_review?.verdict === 'degraded' || run.topic !== previous.topic || run.prompt_hash !== expected.prompt_hash || run.model !== previous.model || run.reasoning !== previous.reasoning || run.max_tokens !== previous.max_tokens || run.protocol !== previous.protocol || run.group_id !== previous.group_id || run.key_source !== previous.key_source) throw new CheckError('invalid_baseline');
         store.setBaseline(id, run.id); response(res, 200, { saved: true }); return;
       }
       if ((!id && req.method === 'POST') || (id && !action && req.method === 'PUT')) {
@@ -315,6 +329,9 @@ export function createService(config, dependencies = {}) {
         if (!id && store.channels().filter(c => !c.demo).length >= 20) throw new CheckError('channel_limit');
         if (id && busyChannels.has(id)) throw new CheckError('already_running', 409);
         const credential = await credentials(req, input, user, previous);
+        // Credential validation can yield while another request deletes or starts this monitor.
+        if (id && !store.channel(id)) throw new CheckError('not_found', 404);
+        if (id && busyChannels.has(id)) throw new CheckError('already_running', 409);
         const config = { ...options, name, interval_minutes: interval, enabled: input.enabled, public: input.public, base_url: credential.base_url, key_source: input.key_source, key_id: input.key_source === 'existing' ? Number(input.key_id) : null,
           group_id: credential.group_id, group_name: credential.group_name, seed: previous?.seed || 20260923 };
         const channel = store.saveChannel(config, user.id, vault.encrypt(credential.key), id);

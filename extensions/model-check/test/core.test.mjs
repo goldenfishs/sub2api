@@ -11,6 +11,21 @@ import { assess, renderArtwork } from '../src/render.mjs';
 import { sampleHTML } from '../src/samples.mjs';
 import { Store, publicRun } from '../src/store.mjs';
 
+test('monitor deletion rolls back its records and encrypted key if the transaction fails', () => {
+  const store = new Store(':memory:');
+  try {
+    const channel = store.saveChannel({ name: 'Atomic deletion', interval_minutes: 60 }, 1, 'fixture-encrypted-key');
+    const run = store.createRun({ channel_id: channel.id, owner_id: 1 });
+    store.updateRun(run.id, { status: 'normal', image: 'fixture-image' });
+    store.setBaseline(channel.id, run.id);
+    store.db.exec("CREATE TRIGGER prevent_channel_delete BEFORE DELETE ON channels BEGIN SELECT RAISE(ABORT, 'fixture_delete_failure'); END;");
+    assert.throws(() => store.deleteChannel(channel.id), /fixture_delete_failure/);
+    assert.equal(store.channel(channel.id).encrypted_key, 'fixture-encrypted-key');
+    assert.equal(store.channel(channel.id).baseline_id, run.id);
+    assert.equal(store.run(run.id).image, 'fixture-image');
+  } finally { store.close(); }
+});
+
 test('external endpoints block private, mapped, reserved and mixed DNS answers', async () => {
   for (const ip of ['127.0.0.1', '10.2.3.4', '172.16.4.7', '192.168.1.1', '100.64.0.1', '169.254.169.254', '0.0.0.0', '198.18.1.2', '::1', '::ffff:127.0.0.1', 'fd00::1', 'fe80::1', '2001:db8::1']) assert.equal(publicAddress(ip), false, ip);
   assert.equal(publicAddress('8.8.8.8'), true);
