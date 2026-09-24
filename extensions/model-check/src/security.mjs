@@ -5,6 +5,7 @@ import { createCipheriv, createDecipheriv, createHash, createHmac, randomBytes, 
 import { readFileSync, writeFileSync, mkdirSync, chmodSync } from 'node:fs';
 import { join } from 'node:path';
 import ipaddr from 'ipaddr.js';
+import { createModelStream } from './stream.mjs';
 
 export class CheckError extends Error {
   constructor(code, status = 400) { super(code); this.code = code; this.status = status; }
@@ -104,7 +105,7 @@ export async function resolveEndpoint(base, route, trustedBase = '', resolver = 
   return { url, address: addresses[0] };
 }
 
-export async function requestJSON(endpoint, { method = 'POST', key = '', body, timeout = 600_000, headers = {} } = {}) {
+export async function requestJSON(endpoint, { method = 'POST', key = '', body, timeout = 600_000, headers = {}, streamProtocol = null } = {}) {
   const { url, address } = endpoint;
   const payload = body === undefined ? null : JSON.stringify(body);
   return new Promise((resolve, reject) => {
@@ -112,25 +113,38 @@ export async function requestJSON(endpoint, { method = 'POST', key = '', body, t
     const finish = (error, value) => { if (settled) return; settled = true; clearTimeout(timer); error ? reject(error) : resolve(value); };
     const req = (url.protocol === 'https:' ? https : http).request(url, {
       method,
-      headers: { 'Content-Type': 'application/json', 'Accept': 'application/json', 'Accept-Encoding': 'identity', ...(key ? { Authorization: `Bearer ${key}` } : {}), ...headers },
+      headers: { 'Content-Type': 'application/json', 'Accept': streamProtocol ? 'text/event-stream, application/json' : 'application/json', 'Accept-Encoding': 'identity', ...(key ? { Authorization: `Bearer ${key}` } : {}), ...headers },
       lookup: (_host, options, done) => options.all ? done(null, [address]) : done(null, address.address, address.family),
       agent: false,
     }, res => {
       if (res.statusCode < 200 || res.statusCode >= 300) {
-        res.resume();
         const code = res.statusCode === 401 || res.statusCode === 403 ? 'upstream_auth' : res.statusCode === 429 ? 'upstream_limit' : res.statusCode >= 300 && res.statusCode < 400 ? 'redirect_refused' : 'upstream_http';
         finish(new CheckError(`${code}:${res.statusCode}`, 502));
+        res.destroy(); req.destroy();
         return;
       }
+      const streaming = streamProtocol && String(res.headers['content-type']).split(';')[0].trim().toLowerCase() === 'text/event-stream';
+      const parser = streaming ? createModelStream(streamProtocol) : null;
+      const streamError = error => new CheckError(['upstream_error', 'truncated_output', 'upstream_disconnected', 'response_too_large'].includes(error.message) ? error.message : 'invalid_upstream_response', 502);
       let size = 0; const chunks = [];
       res.on('data', chunk => {
+        if (settled) return;
         size += chunk.length;
-        if (size > 2_000_000) { finish(new CheckError('response_too_large', 502)); req.destroy(); return; }
-        chunks.push(chunk);
+        if (size > (streaming ? 16_000_000 : 2_000_000)) { finish(new CheckError('response_too_large', 502)); req.destroy(); return; }
+        if (parser) {
+          try {
+            parser.write(chunk);
+            if (parser.done) { finish(null, parser.end()); req.destroy(); }
+          } catch (error) { finish(streamError(error)); req.destroy(); }
+        } else chunks.push(chunk);
       });
       res.on('aborted', () => finish(new CheckError('upstream_disconnected', 502)));
       res.on('error', () => finish(new CheckError('upstream_disconnected', 502)));
-      res.on('end', () => { try { finish(null, JSON.parse(Buffer.concat(chunks).toString('utf8'))); } catch { finish(new CheckError('invalid_upstream_response', 502)); } });
+      res.on('end', () => {
+        if (settled) return;
+        try { finish(null, parser ? parser.end() : JSON.parse(Buffer.concat(chunks).toString('utf8'))); }
+        catch (error) { finish(parser ? streamError(error) : new CheckError('invalid_upstream_response', 502)); }
+      });
     });
     const timer = setTimeout(() => { finish(new CheckError('upstream_timeout', 504)); req.destroy(); }, timeout);
     req.on('error', () => finish(new CheckError('connection_failed', 502)));

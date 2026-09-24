@@ -39,15 +39,16 @@ export async function generateRun(run, credential, trustedBase) {
   const endpoint = await resolveEndpoint(credential.base_url, route, credential.trusted ? trustedBase : '');
   let body;
   if (run.protocol === 'responses') {
-    body = { model: run.model, input: [{ role: 'user', content: [{ type: 'input_text', text: run.prompt }] }], stream: false, store: false, max_output_tokens: run.max_tokens };
+    body = { model: run.model, input: [{ role: 'user', content: [{ type: 'input_text', text: run.prompt }] }], stream: true, store: false, max_output_tokens: run.max_tokens };
     if (run.reasoning !== 'default') body.reasoning = { effort: run.reasoning };
   } else {
-    body = { model: run.model, messages: [{ role: 'user', content: run.prompt }], stream: false, max_tokens: run.max_tokens };
+    body = { model: run.model, messages: [{ role: 'user', content: run.prompt }], stream: true, stream_options: { include_usage: true }, max_tokens: run.max_tokens };
     if (run.reasoning !== 'default') body.reasoning_effort = run.reasoning;
   }
-  const data = await requestJSON(endpoint, { key: credential.key, body });
+  const data = await requestJSON(endpoint, { key: credential.key, body, streamProtocol: run.protocol });
   if (data.error) throw new CheckError('upstream_error', 502);
   if (data.status === 'incomplete' || data.choices?.[0]?.finish_reason === 'length') throw new CheckError('truncated_output', 502);
+  if (['failed', 'cancelled'].includes(data.status) || data.choices?.[0]?.finish_reason === 'content_filter') throw new CheckError('upstream_error', 502);
   let html = data.output_text || data.output?.flatMap(item => item.content || []).filter(c => c.type === 'output_text').map(c => c.text).join('');
   if (run.protocol === 'chat') {
     const content = data.choices?.[0]?.message?.content;

@@ -152,7 +152,7 @@ test('the actual adapter supports Responses and Chat Completions with no paid ca
   const a = await generateRun(run, { key: 'fixture', base_url: base, trusted: true }, base);
   const b = await generateRun({ ...run, protocol: 'chat', reasoning: 'medium' }, { key: 'fixture', base_url: base, trusted: true }, base);
   assert.ok(a.html.includes('<svg>')); assert.equal(a.usage.output_tokens, 6); assert.equal(b.usage.output_tokens, 8);
-  assert.equal(seen[0].body.stream, false); assert.equal(seen[0].body.store, false); assert.equal(seen[0].body.max_output_tokens, 8000);
+  assert.equal(seen[0].body.stream, true); assert.equal(seen[0].body.store, false); assert.equal(seen[0].body.max_output_tokens, 8000);
   assert.equal(seen[1].body.reasoning_effort, 'medium'); assert.equal(seen[1].path, '/v1/chat/completions');
 });
 
