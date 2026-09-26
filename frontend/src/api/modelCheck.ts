@@ -19,6 +19,12 @@ export interface CheckRun extends CheckOptions {
   group_name?: string | null
   created_at: number
   finished_at?: number
+  attempt_count?: number | null
+  max_attempts?: number | null
+  retry_at?: number | null
+  last_attempt_error?: string | null
+  usage_scope?: 'successful_attempt' | null
+  attempts?: { attempt: number; started_at: number; finished_at: number; duration_ms: number; error?: string | null; usage?: CheckRun['usage'] }[]
   generation_ms?: number | null
   tps?: number | null
   total_ms?: number

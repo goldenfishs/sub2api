@@ -60,7 +60,7 @@ jobs:
         working-directory: frontend
         run: |
           pnpm install --frozen-lockfile
-          pnpm exec vitest run src/views/user/__tests__/SubscriptionsView.advanceMonth.spec.ts src/utils/__tests__/featureFlags.spec.ts
+          pnpm exec vitest run src/views/user/__tests__/SubscriptionsView.advanceMonth.spec.ts src/utils/__tests__/featureFlags.spec.ts src/components/modelCheck/__tests__
           pnpm run build
 
   verify-model-check:

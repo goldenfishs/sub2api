@@ -5,7 +5,7 @@
       <div v-else-if="!run" class="mc-loading"><span class="mc-spinner" />{{ t('modelCheck.status.queued') }}</div>
       <template v-else>
         <div class="mc-detail-top"><div><span :class="['mc-status', `is-${run.status}`]">{{ t(`modelCheck.status.${run.status}`) }}</span><CheckQualityBadge v-if="run.assessment" :review="run.quality_review" /><strong>{{ run.model }}</strong><CheckGroupBadge :group-name="run.group_name" :group-id="run.group_id" :key-source="run.key_source" :demo="run.source === 'demo'" /><span class="mc-dim">{{ t(`modelCheck.topic.${run.topic}`) }}</span></div><span v-if="run.source === 'demo'" class="mc-demo-tag">{{ t('modelCheck.demo') }}</span></div>
-        <div v-if="isCheckRunning(run.status)" class="mc-processing" aria-live="polite"><div class="mc-processing-orbit"><Icon name="sparkles" size="xl" /></div><h3>{{ t('modelCheck.processing') }}</h3><p>{{ t(`modelCheck.status.${run.status}`) }}</p><small>{{ t('modelCheck.processingHint') }}</small></div>
+        <div v-if="isCheckRunning(run.status)" class="mc-processing" aria-live="polite"><div class="mc-processing-orbit"><Icon name="sparkles" size="xl" /></div><h3>{{ t('modelCheck.processing') }}</h3><p>{{ run.retry_at ? t('modelCheck.retryScheduled', { attempt: (run.attempt_count || 0) + 1, max: run.max_attempts, time: new Date(run.retry_at).toLocaleTimeString(locale) }) : t(`modelCheck.status.${run.status}`) }}</p><small>{{ t('modelCheck.processingHint') }}</small></div>
         <div v-else-if="run.status === 'failed'" class="mc-failed-preview"><Icon name="exclamationCircle" size="xl" /><h3>{{ t('modelCheck.status.failed') }}</h3><p>{{ translatedError(run.error || 'test_failed') }}</p></div>
         <div v-else class="mc-detail-grid">
           <div>
@@ -18,6 +18,12 @@
             <div class="mc-dimension" v-for="dimension in run.assessment.dimensions" :key="dimension.id"><div><span>{{ t(`modelCheck.dimensions.${dimension.id}`) }}</span><span>{{ dimension.score }}/{{ dimension.max }}</span></div><div class="mc-dimension-track"><span :style="{ width: `${dimension.score / dimension.max * 100}%` }" /></div></div>
           </aside>
         </div>
+        <section v-if="run.attempt_count && (run.attempt_count > 1 || run.retry_at)" class="mc-attempts" aria-live="polite">
+          <strong>{{ t('modelCheck.attemptProgress', { attempt: run.attempt_count, max: run.max_attempts }) }}</strong>
+          <p v-if="run.retry_at">{{ t('modelCheck.retryScheduled', { attempt: run.attempt_count + 1, max: run.max_attempts, time: new Date(run.retry_at).toLocaleTimeString(locale) }) }}</p>
+          <ul><li v-for="attempt in run.attempts || []" :key="attempt.attempt">{{ t('modelCheck.attemptLabel', { attempt: attempt.attempt }) }} · {{ t('modelCheck.seconds', { value: (attempt.duration_ms / 1000).toFixed(1) }) }} · {{ attempt.error ? translatedError(attempt.error) : t('modelCheck.attemptSucceeded') }}</li></ul>
+          <small>{{ t('modelCheck.retryUsageHint') }}</small>
+        </section>
         <template v-if="!isCheckRunning(run.status)">
           <div v-if="run.assessment" class="mc-assessment mc-quality-review">
             <strong>{{ t('modelCheck.qualityReview') }}</strong>
@@ -119,13 +125,19 @@ function download() {
 </script>
 
 <style scoped>
+.mc-attempts { margin: 16px 0; padding: 14px 16px; border: 1px solid #dce7df; border-radius: 10px; font-size: 12px; line-height: 1.8; overflow-wrap: anywhere; }
+.mc-attempts ul { list-style: none; margin: 8px 0; padding: 0; }
+.mc-attempts small { color: #71867a; }
 .mc-facts { grid-template-columns: repeat(5, minmax(0, 1fr)); }
 .mc-facts > div { min-width: 0; }
 .mc-facts .mc-fact-label { display: flex; align-items: center; gap: 4px; }
 .mc-fact-label svg { flex-shrink: 0; }
 .mc-facts strong { font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
 @media (max-width: 700px) {
-  .mc-facts { grid-template-columns: repeat(2, minmax(0, 1fr)); row-gap: 18px; }
+  .mc-attempts { margin: 16px 0; padding: 14px 16px; border: 1px solid #dce7df; border-radius: 10px; font-size: 12px; line-height: 1.8; overflow-wrap: anywhere; }
+.mc-attempts ul { list-style: none; margin: 8px 0; padding: 0; }
+.mc-attempts small { color: #71867a; }
+.mc-facts { grid-template-columns: repeat(2, minmax(0, 1fr)); row-gap: 18px; }
   .mc-facts > div:last-child { grid-column: 1 / -1; }
 }
 </style>

@@ -23,7 +23,7 @@ async function harness(t, overrides = {}) {
   });
   await new Promise(r => backend.listen(0, '127.0.0.1', r));
   const config = { dataDir: directory, backend: `http://127.0.0.1:${backend.address().port}`, siteApiBase: `http://127.0.0.1:${backend.address().port}/v1`, demo: false };
-  const app = createService(config, { render: async () => artifact, generate: async () => ({ html: '<html><svg></svg></html>', usage: { input_tokens: 2, output_tokens: 3 } }), ...overrides });
+  const app = createService(config, { retryWait: async () => {}, render: async () => artifact, generate: async () => ({ html: '<html><svg></svg></html>', usage: { input_tokens: 2, output_tokens: 3 } }), ...overrides });
   await new Promise(r => app.server.listen(0, '127.0.0.1', r));
   t.after(async () => { await app.close(); await new Promise(r => backend.close(r)); rmSync(directory, { recursive: true, force: true }); });
   const base = `http://127.0.0.1:${app.server.address().port}/api/v1/model-check`;
@@ -133,7 +133,7 @@ test('schedule ticks do not overlap jobs, and an upstream failure is not called 
   assert.equal(calls, 1); assert.equal((await call(`/admin/channels/${channel.id}/run`, 'admin', 'POST', {})).status, 409);
   release(); const result = await finished(run.id);
   assert.equal(result.status, 'failed'); assert.equal(result.assessment, undefined); assert.equal(result.error, 'upstream_limit:429');
-  assert.equal(calls, 1, 'no automatic retry');
+  assert.equal(calls, 3, 'temporary rate limits receive at most two retries within the same job');
 });
 
 test('the actual adapter supports Responses and Chat Completions with no paid calls', async t => {

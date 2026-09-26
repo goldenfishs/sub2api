@@ -23,10 +23,10 @@
       <p>{{ t('modelCheck.monitorStatus') }}<span>{{ t('modelCheck.historyCapacity', { count: stats.limit }) }}</span></p>
       <div><span>{{ nextRun }}</span><button type="button" class="mc-refresh" :disabled="refreshing" :aria-label="t('modelCheck.refresh')" @click="$emit('refresh')"><Icon name="refresh" size="sm" :class="{ 'animate-spin': refreshing }" /></button></div>
     </div>
-    <div class="mc-health-track" :aria-label="t('modelCheck.historyCapacity', { count: stats.limit })">
+    <CheckHistoryPreview class="mc-health-track" :aria-label="t('modelCheck.historyCapacity', { count: stats.limit })">
       <span v-for="index in Math.max(0, stats.limit - stats.history.length)" :key="'empty-' + index" class="mc-health-slot" :title="t('modelCheck.noHistory')" />
-      <button v-for="run in stats.history" :key="run.id" type="button" :class="['mc-health-slot', 'is-' + run.status]" :title="historyTitle(run)" :aria-label="historyTitle(run)" @click="$emit('select', run.id, selected?.baseline_id || null)" />
-    </div>
+      <button v-for="run in stats.history" :key="run.id" type="button" :class="['mc-health-slot', 'is-' + run.status]" :title="historyTitle(run)" :aria-label="historyTitle(run)" @click="$emit('select', run.id, selected?.baseline_id || null)" :data-preview-run="run.id" :data-preview-status="run.status" />
+    </CheckHistoryPreview>
     <div class="mc-health-bottom">
       <time>{{ stats.history.length ? date(stats.history[0].created_at) : t('modelCheck.noRuns') }}</time>
       <div class="mc-health-legend">
@@ -48,6 +48,7 @@ import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import Icon from '@/components/icons/Icon.vue'
 import CheckGroupBadge from './CheckGroupBadge.vue'
+import CheckHistoryPreview from './CheckHistoryPreview.vue'
 import type { CheckChannel, CheckStatistics, CheckTopic } from '@/api/modelCheck'
 
 const props = defineProps<{ channels: CheckChannel[]; demo: boolean; refreshing: boolean; demoBusy: boolean }>()

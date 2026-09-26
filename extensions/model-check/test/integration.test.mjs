@@ -39,7 +39,7 @@ async function harness(t, overrides = {}) {
   await new Promise(resolve => backend.listen(0, '127.0.0.1', resolve));
   const config = { dataDir: directory, backend: `http://127.0.0.1:${backend.address().port}`, siteApiBase: `http://127.0.0.1:${backend.address().port}/v1`, demo: false };
   const generated = [];
-  const app = createService(config, { render: overrides.render || (async () => artifact), generate: async (run, credential) => {
+  const app = createService(config, { retryWait: overrides.retryWait || (async () => {}), retryNow: overrides.retryNow, render: overrides.render || (async () => artifact), generate: async (run, credential) => {
     generated.push({ run, credential });
     if (overrides.generate) return overrides.generate(run, credential);
     await new Promise(resolve => setTimeout(resolve, 20));
@@ -214,6 +214,49 @@ test('bounded waits leave the accepted job available for polling', async t => {
   release();
 });
 
+test('temporary upstream failures retry one idempotent run and keep successful-attempt timing separate', async t => {
+  let release; const gate = new Promise(resolve => { release = resolve; });
+  let clock = 1000; let count = 0;
+  const waits = [];
+  const { call, app, channel, generated } = await harness(t, {
+    beforeClose: release, retryNow: () => clock,
+    retryWait: async ms => { waits.push(ms); clock += ms; await gate; },
+    generate: async () => {
+      count++; clock += count === 1 ? 150 : 250;
+      if (count === 1) throw new CheckError('upstream_http:502', 502);
+      return { html: artifact.html, usage: { input_tokens: 10, output_tokens: 100 } };
+    },
+  });
+  const request = { method: 'POST', headers: { 'Idempotency-Key': 'retry-same-run' }, body: { channel_id: channel.id } };
+  const first = await call('/admin/tests', request);
+  const waiting = (await call('/admin/runs/' + first.data.id)).data;
+  assert.equal(waiting.status, 'generating');
+  assert.equal(waiting.attempt_count, 1);
+  assert.equal(waiting.max_attempts, 3);
+  assert.equal(waiting.retry_at, 3150);
+  assert.equal(waiting.last_attempt_error, 'upstream_http:502');
+  assert.equal(waiting.attempts[0].duration_ms, 150);
+  assert.equal((await call('/admin/tests', request)).data.id, first.data.id);
+  assert.equal(generated.length, 1);
+  assert.equal((await call('/admin/tests', { method: 'POST', body: { channel_id: channel.id } })).status, 409);
+  release();
+  const completed = await call('/admin/tests', { ...request, body: { channel_id: channel.id, wait_seconds: 2 } });
+  assert.equal(completed.status, 200);
+  assert.equal(completed.data.status, 'normal');
+  assert.equal(completed.data.attempt_count, 2);
+  assert.equal(completed.data.retry_at, null);
+  assert.equal(completed.data.generation_ms, 250);
+  assert.equal(completed.data.tps, 400);
+  assert.equal(completed.data.usage_scope, 'successful_attempt');
+  assert.equal(completed.data.attempts[0].usage, null);
+  assert.equal(completed.data.attempts[1].usage.output_tokens, 100);
+  assert.deepEqual(waits, [2000]);
+  assert.equal(app.store.listRuns().length, 1);
+  assert.equal(generated[0].run, generated[1].run, 'prompt and sampled seed stay on the same run object');
+  assert.equal(generated[0].credential, generated[1].credential, 'model key remains in memory for this job');
+  assert.ok(!JSON.stringify(app.store.listRuns()).includes(modelKey));
+});
+
 test('pruning an image preserves the idempotency tombstone and never silently recharges a retry', async t => {
   const { call, app, channel, generated } = await harness(t);
   const request = { method: 'POST', headers: { 'Idempotency-Key': 'fixture-pruned-retry' }, body: { channel_id: channel.id, wait_seconds: 2 } };
@@ -234,6 +277,29 @@ test('pruning an image preserves the idempotency tombstone and never silently re
   assert.equal(expired.status, 200, 'idempotency keys may be reused after the documented 24-hour window');
   assert.notEqual(expired.data.id, first.data.id);
   assert.equal(generated.length, 2);
+});
+
+test('total duration includes retry waits while rendering failures and quality review never regenerate', async t => {
+  await t.test('total duration includes the backoff', async sub => {
+    let count = 0;
+    const { call, channel } = await harness(sub, { retryWait: async () => { await new Promise(resolve => setTimeout(resolve, 30)); },
+      generate: async () => { if (++count === 1) throw new CheckError('connection_failed', 502); return { html: artifact.html, usage: null }; } });
+    const result = await call('/admin/tests', { method: 'POST', body: { channel_id: channel.id, wait_seconds: 2 } });
+    assert.equal(result.data.attempt_count, 2);
+    assert.ok(result.data.total_ms >= 25 + result.data.generation_ms);
+  });
+  await t.test('render failures', async sub => {
+    const { call, channel, generated } = await harness(sub, { render: async () => { throw new CheckError('upstream_http:502', 502); } });
+    const result = await call('/admin/tests', { method: 'POST', body: { channel_id: channel.id, wait_seconds: 2 } });
+    assert.equal(result.data.status, 'failed');
+    assert.equal(generated.length, 1);
+  });
+  await t.test('quality review', async sub => {
+    const { call, channel, generated } = await harness(sub, { render: async () => ({ ...artifact, metrics: { ...artifact.metrics, motion_ratio: 0 } }) });
+    const result = await call('/admin/tests', { method: 'POST', body: { channel_id: channel.id, wait_seconds: 2 } });
+    assert.equal(result.data.status, 'review');
+    assert.equal(generated.length, 1);
+  });
 });
 
 test('private monitoring images require authentication and personal privacy is preserved', async t => {
