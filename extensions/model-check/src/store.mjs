@@ -18,7 +18,7 @@ export class Store {
       CREATE TABLE IF NOT EXISTS quality_reviews (id INTEGER PRIMARY KEY, run_id TEXT NOT NULL REFERENCES runs(id) ON DELETE CASCADE, verdict TEXT NOT NULL, reviewer_id INTEGER, auth_method TEXT NOT NULL, reviewed_at INTEGER NOT NULL);`);
     this.db.prepare('DELETE FROM api_requests WHERE created_at<?').run(Date.now() - requestRetentionMs);
     // In-flight secrets exist only in memory. Never replay a potentially billed call after restart.
-    for (const row of this.db.prepare("SELECT id FROM runs WHERE status IN ('queued','generating','rendering')").all()) this.updateRun(row.id, { status: 'failed', error: 'service_restarted', retry_at: null, finished_at: Date.now() });
+    for (const row of this.db.prepare("SELECT id FROM runs WHERE status IN ('queued','generating','rendering')").all()) this.updateRun(row.id, { status: 'failed', error: 'service_restarted', retry_at: null, retry_max_tokens: null, finished_at: Date.now() });
   }
   close() { this.db.close(); }
   channels() { return this.db.prepare('SELECT * FROM channels ORDER BY created_at').all().map(row => this.channelRow(row)); }
@@ -56,6 +56,7 @@ export class Store {
   }
   createRun({ owner_id = 0, channel_id = null, source = 'self', ...data }, request = null) {
     Object.assign(data, { attempt_count: 0, max_attempts: source === 'demo' ? 0 : MAX_ATTEMPTS, retry_at: null, last_attempt_error: null, attempts: [], usage_scope: source === 'demo' ? null : 'successful_attempt' });
+    Object.assign(data, { effective_max_tokens: data.max_tokens ?? null, retry_max_tokens: null });
     const id = randomUUID(); const created_at = Date.now();
     this.db.exec('BEGIN IMMEDIATE');
     try {
@@ -131,6 +132,7 @@ export function publicRun(run, detail = false) {
     quality_review: run.quality_review || null,
     attempt_count: run.attempt_count ?? null, max_attempts: run.max_attempts ?? null,
     retry_at: run.retry_at ?? null, last_attempt_error: run.last_attempt_error ?? null,
+    effective_max_tokens: run.effective_max_tokens ?? run.max_tokens ?? null, retry_max_tokens: run.retry_max_tokens ?? null,
     attempts: run.attempts ?? [], usage_scope: run.usage_scope ?? null,
   };
   if (detail) Object.assign(result, { prompt: run.prompt, seed: run.seed, conditions: run.conditions, html: run.html, metrics: run.metrics, image: run.image ? `data:image/webp;base64,${run.image}` : null, max_tokens: run.max_tokens });

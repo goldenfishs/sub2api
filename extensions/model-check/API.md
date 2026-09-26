@@ -126,11 +126,13 @@ curl --fail 'http://localhost:3000/api/v1/model-check/admin/runs/结果ID/image'
 
 ### 暂时性上游错误的自动重试
 
-一次检测最多尝试 **3 次（初次 + 2 次重试）**，两次等待分别为 **2 秒和 5 秒**。仅重试上游 HTTP `429`、`502`、`503`、`504`、`520`–`524`，以及 `upstream_timeout`、`upstream_disconnected`、`connection_failed`。HTTP 500 不在重试白名单。鉴权/参数错误、输出截断、缺少 HTML、渲染失败、画面待复核或质量下降均不重试。
+一次检测最多尝试 **3 次（初次 + 2 次重试）**，两次等待分别为 **2 秒和 5 秒**。重试上游 HTTP `429`、`502`、`503`、`504`、`520`–`524`，以及 `upstream_timeout`、`upstream_disconnected`、`connection_failed`。HTTP 500 不在重试白名单。鉴权/参数错误、明确的内容过滤、缺少 HTML、渲染失败、画面待复核或质量下降均不重试。
+
+对于 `truncated_output`（输出因上限截断），当前输出上限小于 **16000** 时会将下一次请求上限一次提高至 **16000** 后重试。已经使用 16000 仍截断则立即失败，不重复相同上限的请求；截断重试与网络重试共享总共 3 次的预算。此调整仅作用于本次检测，不修改监测任务配置，也不会改变已接受请求的幂等参数。明确的 Responses `incomplete_details.reason=content_filter` 不视为输出截断。
 
 每次上游请求超时上限为 **600 秒**，三次请求及重试等待最多约 **1807 秒**，另外可能有排队、连接准备和渲染耗时。`wait_seconds` 仍最多 120 秒；提交等待超时后应继续轮询原任务。
 
-所有尝试复用同一结果 ID、题目、随机种子、模型参数和内存中的模型 Key，不创建新的检测记录；等待重试时仍为 `generating`。同任务的并发和 API 幂等保护在整个重试周期内持续有效。服务关闭时停止后续重试，硬重启后将中断记录标记为 `failed / service_restarted`，不会恢复或自动重放上游调用。
+所有尝试复用同一结果 ID、题目、随机种子和内存中的模型 Key；除截断时提高输出上限外，其余模型参数保持不变。不创建新的检测记录，等待重试时仍为 `generating`。同任务的并发和 API 幂等保护在整个重试周期内持续有效。服务关闭时停止后续重试，硬重启后将中断记录标记为 `failed / service_restarted`，不会恢复或自动重放上游调用。
 
 新增字段在列表和详情中均可读取：
 
@@ -139,8 +141,10 @@ curl --fail 'http://localhost:3000/api/v1/model-check/admin/runs/结果ID/image'
 | `attempt_count` | 已开始的尝试次数，排队时为 0；旧记录无数据时为 `null` |
 | `max_attempts` | 新检测为 3，本地示例为 0；旧记录为 `null` |
 | `retry_at` | 下一次重试预计开始的 Unix 毫秒时间；非等待状态为 `null` |
+| `effective_max_tokens` | 当前或最后一次已开始请求的实际输出上限；排队时为请求上限，旧记录回退为原 `max_tokens`。详情的 `max_tokens` 始终保留最初请求值 |
+| `retry_max_tokens` | 等待重试期间下一次请求的输出上限；非等待状态为 `null` |
 | `last_attempt_error` | 最近一次失败的稳定错误码；重试成功后仍保留此前失败原因，无失败为 `null` |
-| `attempts` | 已结束的尝试摘要数组，每项含 `attempt`、`started_at`、`finished_at`、`duration_ms`、`error`、`usage`；不含凭证或原始错误正文 |
+| `attempts` | 已结束的尝试摘要数组，每项含 `attempt`、`started_at`、`finished_at`、`duration_ms`、`max_tokens`（该次实际上限）、`error`、`usage`；不含凭证或原始错误正文。旧尝试可能缺少 `max_tokens` |
 | `usage_scope` | 新检测为 `successful_attempt`，表示顶层 `usage` 仅统计成功那次请求；示例和旧记录为 `null` |
 
 失败尝试的用量无法可靠取得，`attempts[].usage` 为 `null`，并不代表没有消耗额度。自动重试可能产生额外模型费用，顶层 `usage` 与 TPS 不代表全部尝试的总消耗或总耗时。
@@ -175,3 +179,5 @@ curl --fail 'http://localhost:3000/api/v1/model-check/admin/runs/结果ID/image'
 非法复核参数返回 `400 invalid_review`；执行中、失败、无图或非监测作品返回 `409 result_not_reviewable`（不可读记录仍返回 404）。未复核作品不会被自动判为质量正常。
 
 管理员详情页可以从历史记录设置符合当前检测条件的基准。提示词、模型、推理强度、输出上限、协议、分组和密钥来源必须匹配，才计算规则分差；不同参数的作品只能作视觉参考。基础规则满分不代表角色、题意与动作均正确。
+
+输出上限按 `effective_max_tokens ?? max_tokens` 比较。例如请求 8000、截断后以 16000 成功的结果，不会与实际 8000 的基准计算分差，也不能设为当前 8000 上限监测任务的基准。监控统计仍归属原请求配置，详情会如实显示实际尝试上限。

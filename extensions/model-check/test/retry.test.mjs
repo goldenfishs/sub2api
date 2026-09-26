@@ -15,6 +15,55 @@ test('only explicit temporary transport errors permit retries', () => {
     assert.equal(retryable(new CheckError(code)), false, code);
   }
   assert.equal(retryable(Object.assign(new Error('secret response body'), { code: 'upstream_http:502' })), false);
+  assert.equal(retryable(new CheckError('truncated_output'), 8000), true);
+  assert.equal(retryable(new CheckError('truncated_output'), 16000), false);
+});
+
+test('truncation raises only attempt options to 16000 and mixed failures share the three-attempt budget', async () => {
+  for (const [errors, expectedCaps] of [
+    [['truncated_output'], [8000, 16000]],
+    [['upstream_http:502', 'truncated_output'], [8000, 8000, 16000]],
+    [['truncated_output', 'upstream_http:502'], [8000, 16000, 16000]],
+  ]) {
+    const run = { id: 'fixed-run', prompt: 'fixed-prompt', seed: 42, max_tokens: 8000 };
+    const credential = { key: 'fixture-key' }; const caps = []; const waits = []; let persisted = {};
+    const result = await generateWithRetry({ run, credential, signal: new AbortController().signal,
+      update: fields => { persisted = { ...persisted, ...fields }; },
+      wait: async ms => { waits.push(ms); },
+      generate: async (options, key) => {
+        caps.push(options.max_tokens);
+        assert.equal(options.id, run.id); assert.equal(options.prompt, run.prompt); assert.equal(options.seed, run.seed);
+        assert.equal(key, credential);
+        const code = errors[caps.length - 1]; if (code) throw new CheckError(code, 502);
+        return { html: '<html></html>', usage: { output_tokens: 10 } };
+      },
+    });
+    assert.deepEqual(caps, expectedCaps);
+    assert.deepEqual(waits, [2000, 5000].slice(0, expectedCaps.length - 1));
+    assert.deepEqual(persisted.attempts.map(attempt => attempt.max_tokens), expectedCaps);
+    assert.equal(result.effective_max_tokens, 16000);
+    assert.equal(persisted.effective_max_tokens, 16000);
+    assert.equal(persisted.retry_max_tokens, null);
+    assert.equal(run.max_tokens, 8000);
+  }
+});
+
+test('truncation at the ceiling and exhausted mixed failures never add another attempt', async () => {
+  for (const [initialCap, errors, expectedCaps] of [
+    [16000, ['truncated_output'], [16000]],
+    [8000, ['truncated_output', 'truncated_output'], [8000, 16000]],
+    [8000, ['upstream_http:502', 'upstream_http:502', 'truncated_output'], [8000, 8000, 8000]],
+  ]) {
+    const caps = []; let persisted = {};
+    await assert.rejects(generateWithRetry({ run: { max_tokens: initialCap }, credential: {}, signal: new AbortController().signal,
+      update: fields => { persisted = { ...persisted, ...fields }; }, wait: async () => {},
+      generate: async run => { caps.push(run.max_tokens); throw new CheckError(errors[caps.length - 1]); },
+    }), /truncated_output/);
+    assert.deepEqual(caps, expectedCaps);
+    assert.equal(persisted.effective_max_tokens, expectedCaps.at(-1));
+    assert.equal(persisted.retry_max_tokens, null);
+    assert.equal(persisted.retry_at, null);
+  }
 });
 
 test('attempt limit is three with two bounded delays and stable metadata', async () => {
@@ -40,14 +89,16 @@ test('shutdown aborts retry waits promptly and never starts another model call',
   const controller = new AbortController(); let calls = 0; let persisted = {};
   let entered; const waiting = new Promise(resolve => { entered = resolve; });
   const pending = generateWithRetry({
-    run: {}, credential: {}, signal: controller.signal,
+    run: { max_tokens: 8000 }, credential: {}, signal: controller.signal,
     update: fields => { persisted = { ...persisted, ...fields }; if (fields.retry_at) entered(); },
-    generate: async () => { calls++; throw new CheckError('upstream_http:502', 502); },
+    generate: async () => { calls++; throw new CheckError('truncated_output', 502); },
   });
   await waiting; controller.abort();
   await assert.rejects(pending, /service_restarted/);
   assert.equal(calls, 1);
   assert.equal(persisted.retry_at, null);
+  assert.equal(persisted.retry_max_tokens, null);
+  assert.equal(persisted.effective_max_tokens, 8000);
 });
 
 test('shutdown during an attempt prevents retries and permanent errors are single-attempt', async () => {
@@ -67,12 +118,14 @@ test('restart fails interrupted retry jobs without replay and clears their count
   try {
     const path = join(directory, 'state.sqlite'); store = new Store(path);
     const run = store.createRun({ model: 'fixture-model', prompt: 'fixed', seed: 42 });
-    store.updateRun(run.id, { status: 'generating', attempt_count: 1, retry_at: Date.now() + 5000, last_attempt_error: 'upstream_http:502' });
+    store.updateRun(run.id, { status: 'generating', attempt_count: 1, effective_max_tokens: 8000, retry_max_tokens: 16000, retry_at: Date.now() + 5000, last_attempt_error: 'truncated_output' });
     store.close(); store = new Store(path);
     const recovered = store.run(run.id);
     assert.equal(recovered.status, 'failed');
     assert.equal(recovered.error, 'service_restarted');
     assert.equal(recovered.attempt_count, 1);
     assert.equal(recovered.retry_at, null);
+    assert.equal(recovered.retry_max_tokens, null);
+    assert.equal(recovered.effective_max_tokens, 8000);
   } finally { store?.close(); rmSync(directory, { recursive: true, force: true }); }
 });

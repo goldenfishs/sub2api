@@ -156,6 +156,21 @@ test('the actual adapter supports Responses and Chat Completions with no paid ca
   assert.equal(seen[1].body.reasoning_effort, 'medium'); assert.equal(seen[1].path, '/v1/chat/completions');
 });
 
+test('Responses JSON incomplete reasons distinguish token limits from content filtering', async t => {
+  let reason;
+  const upstream = http.createServer((_req, res) => {
+    res.setHeader('Content-Type', 'application/json');
+    res.end(JSON.stringify({ status: 'incomplete', incomplete_details: reason !== undefined ? { reason } : undefined }));
+  });
+  await new Promise(resolve => upstream.listen(0, '127.0.0.1', resolve));
+  t.after(() => new Promise(resolve => upstream.close(resolve)));
+  const base = `http://127.0.0.1:${upstream.address().port}/v1`;
+  for (const [incompleteReason, expectedError] of [['max_output_tokens', 'truncated_output'], [undefined, 'truncated_output'], ['content_filter', 'upstream_error'], ['other_reason', 'upstream_error'], ['', 'upstream_error'], [0, 'upstream_error'], [false, 'upstream_error']]) {
+    reason = incompleteReason;
+    await assert.rejects(generateRun({ ...options, prompt: 'fixture' }, { key: 'fixture', base_url: base, trusted: true }, base), error => error.code === expectedError);
+  }
+});
+
 test('group names come from the owned key and remain attached to each historical work', async t => {
   const { app, call, finished, setGroup } = await harness(t);
   const forged = { group_id: 999, group_name: 'Forged group' };

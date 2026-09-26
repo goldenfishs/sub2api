@@ -48,7 +48,11 @@ export async function generateRun(run, credential, trustedBase) {
   }
   const data = await requestJSON(endpoint, { key: credential.key, body, streamProtocol: run.protocol });
   if (data.error) throw new CheckError('upstream_error', 502);
-  if (data.status === 'incomplete' || data.choices?.[0]?.finish_reason === 'length') throw new CheckError('truncated_output', 502);
+  if (data.status === 'incomplete') {
+    const reason = data.incomplete_details?.reason;
+    throw new CheckError(reason == null || reason === 'max_output_tokens' ? 'truncated_output' : 'upstream_error', 502);
+  }
+  if (data.choices?.[0]?.finish_reason === 'length') throw new CheckError('truncated_output', 502);
   if (['failed', 'cancelled'].includes(data.status) || data.choices?.[0]?.finish_reason === 'content_filter') throw new CheckError('upstream_error', 502);
   let html = data.output_text || data.output?.flatMap(item => item.content || []).filter(c => c.type === 'output_text').map(c => c.text).join('');
   if (run.protocol === 'chat') {
@@ -166,13 +170,13 @@ export function createService(config, dependencies = {}) {
       const artifact = await render(result.html);
       const channel = run.channel_id ? store.channel(run.channel_id) : null;
       const baseline = channel?.baseline_id ? store.run(channel.baseline_id) : null;
-      const compatible = baseline && baseline.prompt_hash === run.prompt_hash && baseline.model === run.model && baseline.reasoning === run.reasoning && baseline.max_tokens === run.max_tokens && baseline.protocol === run.protocol && baseline.group_id === run.group_id && baseline.key_source === run.key_source;
+      const compatible = baseline && baseline.prompt_hash === run.prompt_hash && baseline.model === run.model && baseline.reasoning === run.reasoning && (baseline.effective_max_tokens ?? baseline.max_tokens) === (result.effective_max_tokens ?? run.max_tokens) && baseline.protocol === run.protocol && baseline.group_id === run.group_id && baseline.key_source === run.key_source;
       const assessment = assess(artifact.metrics, baseline?.assessment, compatible);
       store.updateRun(run.id, { ...artifact, assessment, status: assessment.verdict, total_ms: Date.now() - start, finished_at: Date.now() });
     } catch (error) {
       // Only stable error codes are retained, never response bodies, credentials or stack traces.
       const code = error instanceof CheckError ? error.code : ['html_too_large', 'too_many_nodes', 'empty_html', 'render_timeout', 'render_unavailable'].includes(error.message) ? error.message : 'test_failed';
-      store.updateRun(run.id, { status: 'failed', error: code, retry_at: null, total_ms: Date.now() - start, finished_at: Date.now() });
+      store.updateRun(run.id, { status: 'failed', error: code, retry_at: null, retry_max_tokens: null, total_ms: Date.now() - start, finished_at: Date.now() });
     } finally { store.prune(); }
   }
   function channelRun(channel, source, options = validateOptions(channel), request = null) {
@@ -322,7 +326,7 @@ export function createService(config, dependencies = {}) {
       if (action === 'baseline' && req.method === 'POST') {
         const input = await readBody(req); const run = store.run(input.run_id);
         const expected = run && makePrompt(previous.topic, previous.topic === 'creative' ? run.seed : previous.seed);
-        if (!run || run.channel_id !== id || run.status !== 'normal' || run.quality_review?.verdict === 'degraded' || run.topic !== previous.topic || run.prompt_hash !== expected.prompt_hash || run.model !== previous.model || run.reasoning !== previous.reasoning || run.max_tokens !== previous.max_tokens || run.protocol !== previous.protocol || run.group_id !== previous.group_id || run.key_source !== previous.key_source) throw new CheckError('invalid_baseline');
+        if (!run || run.channel_id !== id || run.status !== 'normal' || run.quality_review?.verdict === 'degraded' || run.topic !== previous.topic || run.prompt_hash !== expected.prompt_hash || run.model !== previous.model || run.reasoning !== previous.reasoning || (run.effective_max_tokens ?? run.max_tokens) !== previous.max_tokens || run.protocol !== previous.protocol || run.group_id !== previous.group_id || run.key_source !== previous.key_source) throw new CheckError('invalid_baseline');
         store.setBaseline(id, run.id); response(res, 200, { saved: true }); return;
       }
       if ((!id && req.method === 'POST') || (id && !action && req.method === 'PUT')) {
