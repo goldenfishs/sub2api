@@ -64,6 +64,8 @@ curl --request POST 'http://localhost:3000/api/v1/model-check/admin/tests' \
 
 可选参数如下；覆盖参数只作用于这一轮，不修改定时任务配置。两种题目均由服务端生成提示词，不接受自行传入 `prompt`。
 
+当前题目版本为 `svg-observation-v3`。鹈鹕骑行使用新版题目与离线 SVG 动画约束；随机创作正文保持不变。每条记录保留实际 `prompt`、`prompt_hash`、`prompt_version` 和 `seed`。旧版鹈鹕基准与新题目的哈希不同，不能用于新题目基准比较，应在新版结果中重新设置基准。
+
 | 字段 | 说明 |
 | --- | --- |
 | `channel_id` | 必填，监测任务 ID |
@@ -81,7 +83,7 @@ curl --request POST 'http://localhost:3000/api/v1/model-check/admin/tests' \
 - `status`：`queued` → `generating` → `rendering` → `normal`（通过）/ `review`（待复核）/ `failed`（请求或渲染失败）。
 - 完成记录的 `image` 是 `data:image/webp;base64,...`；`image_url` 是可下载图片的相对路径，需带管理员鉴权访问。失败或尚未生成图片时两者为 `null`。
 - `assessment` 包含总分、四项画面检查分、判定依据和基准变化；`prompt` / `conditions` 保留本次使用的题目。
-- `tps` = `usage.output_tokens / (generation_ms / 1000)`，单位 tokens/s。它是包含首字等待的平均生成速度，不计排队或渲染时间，也不是流式首字后的解码速度。缺少有效耗时或用量、以及本地示例时为 `null`；旧记录有耗时与用量的也能计算。
+- `tps` = `usage.output_tokens / (generation_ms / 1000)`，单位 tokens/s。`generation_ms` 仅为最终成功那次请求的耗时，包含该次首字等待；不计先前失败尝试、重试等待、排队或渲染时间，也不是流式首字后的解码速度。`total_ms` 包含所有尝试、重试等待和渲染，不含排队。缺少有效耗时或用量、以及本地示例时 TPS 为 `null`；旧记录有耗时与用量的也能计算。
 
 返回字段示例（图片 Base64 省略）：
 
@@ -121,6 +123,29 @@ curl --fail 'http://localhost:3000/api/v1/model-check/admin/runs/结果ID/image'
 完整图片也可以直接把 JSON 的 `image` 字段在逗号后进行 Base64 解码保存。不要将管理员密钥作为图片 URL 的查询参数。
 
 ## 重试、保留与错误
+
+### 暂时性上游错误的自动重试
+
+一次检测最多尝试 **3 次（初次 + 2 次重试）**，两次等待分别为 **2 秒和 5 秒**。仅重试上游 HTTP `429`、`502`、`503`、`504`、`520`–`524`，以及 `upstream_timeout`、`upstream_disconnected`、`connection_failed`。HTTP 500 不在重试白名单。鉴权/参数错误、输出截断、缺少 HTML、渲染失败、画面待复核或质量下降均不重试。
+
+每次上游请求超时上限为 **600 秒**，三次请求及重试等待最多约 **1807 秒**，另外可能有排队、连接准备和渲染耗时。`wait_seconds` 仍最多 120 秒；提交等待超时后应继续轮询原任务。
+
+所有尝试复用同一结果 ID、题目、随机种子、模型参数和内存中的模型 Key，不创建新的检测记录；等待重试时仍为 `generating`。同任务的并发和 API 幂等保护在整个重试周期内持续有效。服务关闭时停止后续重试，硬重启后将中断记录标记为 `failed / service_restarted`，不会恢复或自动重放上游调用。
+
+新增字段在列表和详情中均可读取：
+
+| 字段 | 含义 |
+| --- | --- |
+| `attempt_count` | 已开始的尝试次数，排队时为 0；旧记录无数据时为 `null` |
+| `max_attempts` | 新检测为 3，本地示例为 0；旧记录为 `null` |
+| `retry_at` | 下一次重试预计开始的 Unix 毫秒时间；非等待状态为 `null` |
+| `last_attempt_error` | 最近一次失败的稳定错误码；重试成功后仍保留此前失败原因，无失败为 `null` |
+| `attempts` | 已结束的尝试摘要数组，每项含 `attempt`、`started_at`、`finished_at`、`duration_ms`、`error`、`usage`；不含凭证或原始错误正文 |
+| `usage_scope` | 新检测为 `successful_attempt`，表示顶层 `usage` 仅统计成功那次请求；示例和旧记录为 `null` |
+
+失败尝试的用量无法可靠取得，`attempts[].usage` 为 `null`，并不代表没有消耗额度。自动重试可能产生额外模型费用，顶层 `usage` 与 TPS 不代表全部尝试的总消耗或总耗时。
+
+### 客户端重试与记录保留
 
 `Idempotency-Key` 可选，去重期限 **24 小时**。同一个键与相同任务及参数返回同一条记录；若更换参数或任务配置则返回 `409 idempotency_conflict`。24 小时内即使结果已被保留策略清理，也只返回 `410 result_expired`，不会自动再次生成。超过 24 小时后该键会被视为新请求。未提供此请求头时，每次提交都代表一次新检测。
 

@@ -1,5 +1,6 @@
 export default {
   modelCheck: {
+    previewLoading: 'Loading preview…', previewUnavailable: 'This preview is unavailable. Open the test for details.',
     externalGroupLabel: 'Group name (optional)', externalGroupPlaceholder: 'e.g. Pro pool or Enterprise', externalGroupHint: 'External APIs do not expose a group here. Add a display name for the artwork cards.',
     healthTitle: 'Test overview', selectMonitor: 'Select a monitor',
     passRate: 'Basic pass rate', passRateHint: 'Basic checks passed / (passed + needs review). This checks structure, visibility, motion and layout; it does not establish visual quality or compliance with the prompt. API and rendering failures are excluded. No assessed tests is shown as —.',
@@ -29,8 +30,10 @@ export default {
     baseHint: 'OpenAI-compatible API; use the domain or a base URL ending in /v1.', keyHint: 'Used only for this request, never saved to history or browser storage.',
     model: 'Model name', reasoning: 'Reasoning effort', defaultReasoning: 'Model default', low: 'Low', medium: 'Medium', high: 'High',
     protocol: 'API format', advanced: 'More parameters', maxTokens: 'Maximum output tokens',
-    costHint: 'Real tests consume the selected key’s quota at your provider’s rates. Timeout: 600 seconds. No automatic retries.',
+    costHint: 'Real tests consume the selected key’s quota at your provider’s rates. Transient failures retry up to twice, with a 600-second limit per attempt. Retries may incur charges.',
     start: 'Create and check', starting: 'Submitting…', cancel: 'Cancel', demoStart: 'Run local example',
+    attemptProgress: '{attempt} / {max} attempts started', attemptLabel: 'Attempt {attempt}', attemptSucceeded: 'Generation completed',
+    retryScheduled: 'Attempt {attempt} / {max} will start automatically at {time}', retryUsageHint: 'Tokens and TPS cover only the successful generation. Total time includes retry waits; failed requests may also incur charges.',
     processing: 'Your creative study is in progress', processingHint: 'Results update automatically. You can close this window and check your history later.',
     preview: 'Artwork preview', animation: 'Play animation', screenshot: 'View screenshot', download: 'Download HTML',
     visualScore: 'Basic checks', points: 'points', assessment: 'What we checked', dimensions: { drawing: 'SVG structure', visibility: 'Visible content', motion: 'Observed motion', layout: 'Viewport fit' },
@@ -64,7 +67,7 @@ export default {
       login_required: 'Please sign in again.', admin_required: 'Administrator access is required.', key_required: 'Select or enter an API key.', key_unavailable: 'This key is currently unavailable.',
       invalid_base_url: 'Enter a valid API base URL.', https_required: 'External endpoints require HTTPS.', https_port_required: 'External endpoints currently require HTTPS port 443.', private_address: 'External endpoints cannot point to a private network or localhost.',
       dns_failed: 'The endpoint address could not be resolved.', upstream_auth: 'The provider rejected the key. Check its permissions and expiry.', upstream_limit: 'The provider has rate-limited this request or the quota is exhausted.', upstream_http: 'The endpoint returned an error. Check the model and API format.',
-      redirect_refused: 'The endpoint redirected. Enter the final API URL directly.', upstream_timeout: 'The model did not finish in 600 seconds. Retry manually later.', connection_failed: 'Connection failed. Check the local service or endpoint.',
+      redirect_refused: 'The endpoint redirected. Enter the final API URL directly.', upstream_timeout: 'This model request exceeded 600 seconds. Check the attempt history.', connection_failed: 'Connection failed. Check the local service or endpoint.',
       invalid_upstream_response: 'The endpoint did not return valid JSON.', upstream_disconnected: 'The provider disconnected.', upstream_error: 'The provider returned an error. No retry was made.', response_too_large: 'The response exceeded the size limit.',
       truncated_output: 'The output hit the token limit. Increase it and retry manually.', missing_html: 'The model did not return renderable HTML.', html_too_large: 'The generated HTML is too large.', too_many_nodes: 'The drawing contains too many nodes.', empty_html: 'The model returned empty content.',
       render_timeout: 'Rendering timed out and was terminated.', render_unavailable: 'The renderer is unavailable. Check the local Chromium installation.', queue_full: 'The test queue is full. Try again later.', already_running: 'A test is already in progress. Wait for it to finish.', demo_cooldown: 'Wait a few seconds before running another example.',

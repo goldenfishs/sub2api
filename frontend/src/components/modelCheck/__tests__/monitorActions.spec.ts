@@ -166,3 +166,18 @@ describe('artwork quality review', () => {
     expect(api.review).not.toHaveBeenCalled()
   })
 })
+
+it('shows a scheduled retry and its failed attempt without claiming a completed result', async () => {
+  api.run.mockResolvedValue({
+    ...completed(), status: 'generating', assessment: undefined, image: null, thumbnail: null,
+    attempt_count: 1, max_attempts: 3, retry_at: Date.now() + 5000,
+    attempts: [{ attempt: 1, started_at: 1000, finished_at: 2100, duration_ms: 1100, error: 'upstream_http:502', usage: null }],
+  })
+  const wrapper = mount(CheckRunDialog, { props: { runId: 'retry-run' }, global })
+  await flushPromises()
+  expect(wrapper.text()).toContain('已尝试 1 / 3 次')
+  expect(wrapper.text()).toContain('自动进行第 2 / 3 次尝试')
+  expect(wrapper.text()).toContain('第 1 次 · 1.1 秒')
+  expect(wrapper.text()).toContain('失败请求也可能产生费用')
+  expect(wrapper.text()).not.toContain('作品质量复核')
+})

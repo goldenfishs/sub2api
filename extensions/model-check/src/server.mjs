@@ -8,6 +8,7 @@ import { makePrompt, makeScheduledPrompt, validateOptions, TOPICS } from './prom
 import { renderArtwork, assess } from './render.mjs';
 import { sampleHTML } from './samples.mjs';
 import { API_PREFIX, apiRun, prepareAPITest, waitForResult, sendImage, isFinished } from './integration.mjs';
+import { generateWithRetry } from './retry.mjs';
 
 const PREFIX = API_PREFIX;
 const activeStatuses = ['queued', 'generating', 'rendering'];
@@ -69,6 +70,7 @@ export function createService(config, dependencies = {}) {
   const vault = secretVault(config.dataDir);
   const render = dependencies.render || renderArtwork;
   const generate = dependencies.generate || generateRun;
+  const retryController = new AbortController();
   const queue = []; const busyChannels = new Set(); const runningOwners = new Set();
   let running = 0; let closing = false; let lastDemo = 0;
   const requestIdentities = new WeakMap();
@@ -153,8 +155,12 @@ export function createService(config, dependencies = {}) {
     const start = Date.now(); const { run } = job;
     try {
       store.updateRun(run.id, { status: 'generating' });
-      const result = job.demoHtml ? { html: job.demoHtml, usage: null } : await generate(run, job.credential, config.siteApiBase);
-      const generation_ms = job.demoHtml ? null : Date.now() - start;
+      const result = job.demoHtml ? { html: job.demoHtml, usage: null, generation_ms: null } : await generateWithRetry({
+        run, credential: job.credential, trustedBase: config.siteApiBase, generate,
+        update: fields => store.updateRun(run.id, fields), signal: retryController.signal,
+        wait: dependencies.retryWait, now: dependencies.retryNow,
+      });
+      const generation_ms = result.generation_ms;
       job.credential = null;
       store.updateRun(run.id, { status: 'rendering', generation_ms, usage: result.usage });
       const artifact = await render(result.html);
@@ -166,7 +172,7 @@ export function createService(config, dependencies = {}) {
     } catch (error) {
       // Only stable error codes are retained, never response bodies, credentials or stack traces.
       const code = error instanceof CheckError ? error.code : ['html_too_large', 'too_many_nodes', 'empty_html', 'render_timeout', 'render_unavailable'].includes(error.message) ? error.message : 'test_failed';
-      store.updateRun(run.id, { status: 'failed', error: code, total_ms: Date.now() - start, finished_at: Date.now() });
+      store.updateRun(run.id, { status: 'failed', error: code, retry_at: null, total_ms: Date.now() - start, finished_at: Date.now() });
     } finally { store.prune(); }
   }
   function channelRun(channel, source, options = validateOptions(channel), request = null) {
@@ -355,7 +361,7 @@ export function createService(config, dependencies = {}) {
     }
   }
   return { server, store, tick, seedDemo, async close() {
-    closing = true; clearInterval(timer); await new Promise(resolveClose => server.close(resolveClose));
+    closing = true; retryController.abort(); clearInterval(timer); await new Promise(resolveClose => server.close(resolveClose));
     // Finish accepted calls before closing the SQLite file. A hard shutdown is recovered as failed.
     while (running) await new Promise(r => setTimeout(r, 50));
     for (const job of queue) { job.credential = null; store.updateRun(job.run.id, { status: 'failed', error: 'service_restarted', finished_at: Date.now() }); }
