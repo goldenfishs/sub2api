@@ -233,11 +233,11 @@ describe('output token limit retry details', () => {
     expect(wrapper.text()).not.toContain('自动进行第 3')
   })
 
-  it('shows comparison as reference only when effective output limits differ despite matching original caps', async () => {
-    api.run.mockImplementation(async (id: string) => ({ ...completed(), id, max_tokens: 8000, ...(id === 'upgraded-run' ? { effective_max_tokens: 16000 } : {}) }))
+  it.each([8000, 16000])('compares effective cap %s against the legacy baseline cap rather than only the original request cap', async (effectiveMaxTokens) => {
+    api.run.mockImplementation(async (id: string) => ({ ...completed(), id, max_tokens: 8000, ...(id === 'upgraded-run' ? { effective_max_tokens: effectiveMaxTokens } : {}) }))
     const wrapper = mount(CheckRunDialog, { props: { runId: 'upgraded-run', baselineId: 'legacy-baseline' }, global })
     await flushPromises()
     await button(wrapper, '对比基准').trigger('click')
-    expect(wrapper.text()).toContain('不计算基准分差')
+    expect(wrapper.text().includes('不计算基准分差')).toBe(effectiveMaxTokens !== 8000)
   })
 })
