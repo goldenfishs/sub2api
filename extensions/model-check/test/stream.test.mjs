@@ -4,6 +4,7 @@ import http from 'node:http';
 import { setImmediate as nextTurn } from 'node:timers/promises';
 import { generateRun } from '../src/server.mjs';
 import { CheckError, requestJSON } from '../src/security.mjs';
+import { generateWithRetry } from '../src/retry.mjs';
 
 const html = '<html><svg><text>鹈鹕骑行</text></svg></html>';
 const secret = 'fixture-stream-key-must-not-leak';
@@ -28,7 +29,7 @@ async function upstream(t, handler) {
   const base = `http://127.0.0.1:${server.address().port}/v1`;
   return {
     seen,
-    generate: (protocol = 'responses') => generateRun({ ...run, protocol }, { key: secret, base_url: base, trusted: true }, base),
+    generate: (protocol = 'responses', options = {}) => generateRun({ ...run, ...options, protocol }, { key: secret, base_url: base, trusted: true }, base),
     request: options => requestJSON({ url: new URL(base + '/responses'), address: { address: '127.0.0.1', family: 4 } }, { body: {}, streamProtocol: 'responses', ...options }),
   };
 }
@@ -108,6 +109,38 @@ for (const [reason, expected] of [['length', 'truncated_output'], ['content_filt
     const fixture = await upstream(t, (_req, res) => { sse(res); res.end(event(chat(html)) + event(chat('', reason)) + 'data: [DONE]\n\n'); });
     await assert.rejects(fixture.generate('chat'), safeFailure(expected));
   });
+}
+
+for (const type of ['response.incomplete', 'response.completed']) {
+  for (const reason of ['max_output_tokens', undefined, 'content_filter', 'unexpected_non_token_reason']) {
+    test(`${type} classifies ${reason ?? 'missing reason'} before deciding whether to raise the token limit`, async t => {
+      const retryExpected = reason == null || reason === 'max_output_tokens';
+      let calls = 0;
+      const fixture = await upstream(t, (_req, res) => {
+        sse(res);
+        if (++calls > 1) { res.end(event(completed())); return; }
+        const incomplete = { status: 'incomplete', ...(reason === undefined ? {} : { incomplete_details: { reason } }) };
+        res.end(event(delta(html)) + event({ type, response: incomplete }));
+      });
+      let persisted = {};
+      const pending = generateWithRetry({
+        run, credential: {}, signal: new AbortController().signal,
+        generate: options => fixture.generate('responses', options),
+        update: fields => { persisted = { ...persisted, ...fields }; }, wait: async () => {},
+      });
+      if (retryExpected) {
+        const result = await pending;
+        assert.equal(result.html, html);
+        assert.equal(result.effective_max_tokens, 16000);
+        assert.deepEqual(fixture.seen.map(request => request.body.max_output_tokens), [8000, 16000]);
+      } else {
+        await assert.rejects(pending, safeFailure('upstream_error'));
+        assert.equal(calls, 1, 'non-token incompletion must not cause another billed request');
+        assert.equal(persisted.retry_max_tokens, null);
+      }
+      assert.ok(!JSON.stringify(persisted).includes(secret));
+    });
+  }
 }
 
 test('Chat stream errors never expose the upstream message or credential', async t => {

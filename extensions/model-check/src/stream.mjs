@@ -8,6 +8,12 @@ export function createModelStream(protocol) {
   let buffer = '', data = [], event = '', textBytes = 0, eventBytes = 0;
   let chatText = '', finishReason = null, usage = null, result = null;
   const fail = code => { throw new Error(code); };
+  const incomplete = response => {
+    const reason = response?.incomplete_details?.reason;
+    // Legacy compatible providers omit the reason. Explicit non-token reasons
+    // must not trigger another billed generation with a higher output limit.
+    fail(reason == null || reason === 'max_output_tokens' ? 'truncated_output' : 'upstream_error');
+  };
   const text = value => {
     if (typeof value !== 'string') fail('invalid_upstream_response');
     textBytes += Buffer.byteLength(value);
@@ -38,14 +44,14 @@ export function createModelStream(protocol) {
     if (!value || typeof value !== 'object' || Array.isArray(value)) fail('invalid_upstream_response');
     const type = value.type || name;
     if (value.error || type === 'error' || ['response.failed', 'response.cancelled'].includes(type)) fail('upstream_error');
-    if (type === 'response.incomplete') fail('truncated_output');
+    if (type === 'response.incomplete') incomplete(value.response);
     if (protocol === 'responses') {
       if (type === 'response.output_text.delta') part(value);
       else if (type === 'response.output_text.done') part(value, true);
       else if (type === 'response.completed') {
         const response = value.response;
         if (!response || typeof response !== 'object') fail('invalid_upstream_response');
-        if (response.status === 'incomplete') fail('truncated_output');
+        if (response.status === 'incomplete') incomplete(response);
         if (response.error || (response.status && response.status !== 'completed')) fail('upstream_error');
         const output = response.output_text || response.output?.flatMap(item => item.content || [])
           .filter(item => item.type === 'output_text').map(item => item.text || '').join('') || accumulated();

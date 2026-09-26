@@ -18,10 +18,12 @@
             <div class="mc-dimension" v-for="dimension in run.assessment.dimensions" :key="dimension.id"><div><span>{{ t(`modelCheck.dimensions.${dimension.id}`) }}</span><span>{{ dimension.score }}/{{ dimension.max }}</span></div><div class="mc-dimension-track"><span :style="{ width: `${dimension.score / dimension.max * 100}%` }" /></div></div>
           </aside>
         </div>
-        <section v-if="run.attempt_count && (run.attempt_count > 1 || run.retry_at)" class="mc-attempts" aria-live="polite">
+        <section v-if="run.attempt_count && (run.attempt_count > 1 || run.retry_at || run.status === 'failed')" class="mc-attempts" aria-live="polite">
           <strong>{{ t('modelCheck.attemptProgress', { attempt: run.attempt_count, max: run.max_attempts }) }}</strong>
+          <p v-if="run.retry_at && run.retry_max_tokens && run.retry_max_tokens > (run.effective_max_tokens ?? run.max_tokens)">{{ t('modelCheck.tokenLimitRetry', { from: formatTokens(run.effective_max_tokens ?? run.max_tokens), to: formatTokens(run.retry_max_tokens) }) }}</p>
+          <p v-else-if="run.effective_max_tokens && run.effective_max_tokens > run.max_tokens">{{ t('modelCheck.tokenLimitExpanded', { requested: formatTokens(run.max_tokens), effective: formatTokens(run.effective_max_tokens) }) }}</p>
           <p v-if="run.retry_at">{{ t('modelCheck.retryScheduled', { attempt: run.attempt_count + 1, max: run.max_attempts, time: new Date(run.retry_at).toLocaleTimeString(locale) }) }}</p>
-          <ul><li v-for="attempt in run.attempts || []" :key="attempt.attempt">{{ t('modelCheck.attemptLabel', { attempt: attempt.attempt }) }} · {{ t('modelCheck.seconds', { value: (attempt.duration_ms / 1000).toFixed(1) }) }} · {{ attempt.error ? translatedError(attempt.error) : t('modelCheck.attemptSucceeded') }}</li></ul>
+          <ul><li v-for="attempt in run.attempts || []" :key="attempt.attempt">{{ t('modelCheck.attemptLabel', { attempt: attempt.attempt }) }} · {{ t('modelCheck.attemptTokenLimit', { value: formatTokens(attempt.max_tokens ?? run.max_tokens) }) }} · {{ t('modelCheck.seconds', { value: (attempt.duration_ms / 1000).toFixed(1) }) }} · {{ attempt.error ? translatedError(attempt.error) : t('modelCheck.attemptSucceeded') }}</li></ul>
           <small>{{ t('modelCheck.retryUsageHint') }}</small>
         </section>
         <template v-if="!isCheckRunning(run.status)">
@@ -68,7 +70,7 @@ defineEmits<{ close: [] }>()
 const { t, te, locale } = useI18n()
 const auth = useAuthStore()
 const reviewing = ref(false), reviewError = ref(''), reviewNotice = ref('')
-const comparable = computed(() => !!run.value && !!baseline.value && ['prompt_hash', 'model', 'reasoning', 'max_tokens', 'protocol', 'group_id', 'key_source'].every(key => run.value?.[key as keyof CheckRun] === baseline.value?.[key as keyof CheckRun]))
+const comparable = computed(() => !!run.value && !!baseline.value && ['prompt_hash', 'model', 'reasoning', 'protocol', 'group_id', 'key_source'].every(key => run.value?.[key as keyof CheckRun] === baseline.value?.[key as keyof CheckRun]) && (run.value.effective_max_tokens ?? run.value.max_tokens) === (baseline.value.effective_max_tokens ?? baseline.value.max_tokens))
 const run = ref<CheckRun | null>(null), baseline = ref<CheckRun | null>(null), error = ref(''), playing = ref(false), compare = ref(false)
 const tps = computed(() => {
   const value = run.value?.tps
@@ -78,6 +80,7 @@ const tps = computed(() => {
 let timer: ReturnType<typeof setTimeout> | undefined
 let version = 0
 const translatedError = (code: string) => te(`modelCheck.errors.${code.split(':')[0]}`) ? t(`modelCheck.errors.${code.split(':')[0]}`) : t('modelCheck.errors.test_failed')
+const formatTokens = (value: number) => value.toLocaleString(locale.value)
 async function load() {
   if (!props.runId) return
   const current = version

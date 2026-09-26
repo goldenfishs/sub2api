@@ -177,7 +177,67 @@ it('shows a scheduled retry and its failed attempt without claiming a completed 
   await flushPromises()
   expect(wrapper.text()).toContain('已尝试 1 / 3 次')
   expect(wrapper.text()).toContain('自动进行第 2 / 3 次尝试')
-  expect(wrapper.text()).toContain('第 1 次 · 1.1 秒')
+  expect(wrapper.text()).toContain('第 1 次 · 输出上限 8,000 · 1.1 秒')
   expect(wrapper.text()).toContain('失败请求也可能产生费用')
   expect(wrapper.text()).not.toContain('作品质量复核')
+})
+
+describe('output token limit retry details', () => {
+  const failed = () => ({ ...completed(), status: 'failed' as const, assessment: undefined, image: null, thumbnail: null, error: 'truncated_output' })
+
+  it('does not claim an old single-attempt token-limit failure was automatically upgraded', async () => {
+    api.run.mockResolvedValue({ ...failed(), attempt_count: 1, max_attempts: 3, attempts: [{ attempt: 1, started_at: 1000, finished_at: 2100, duration_ms: 1100, error: 'truncated_output' }] })
+    const wrapper = mount(CheckRunDialog, { props: { runId: 'old-failed-run' }, global })
+    await flushPromises()
+    expect(wrapper.text()).toContain('Token')
+    expect(wrapper.text()).not.toMatch(/已.{0,12}(?:提升|提高|升至|增加)/)
+    expect(wrapper.text()).not.toContain('自动进行第 2')
+    expect(wrapper.text()).not.toMatch(/16,?000/)
+    expect(wrapper.text()).toContain('第 1 次 · 输出上限 8,000')
+  })
+
+  it('explains the next higher limit while keeping the failed attempt at its original cap', async () => {
+    api.run.mockResolvedValue({
+      ...failed(), status: 'generating', error: undefined,
+      max_tokens: 8000, effective_max_tokens: 8000, retry_max_tokens: 16000,
+      attempt_count: 1, max_attempts: 3, retry_at: Date.now() + 5000, last_attempt_error: 'truncated_output',
+      attempts: [{ attempt: 1, max_tokens: 8000, started_at: 1000, finished_at: 2100, duration_ms: 1100, error: 'truncated_output', usage: null }],
+    })
+    const wrapper = mount(CheckRunDialog, { props: { runId: 'awaiting-higher-cap' }, global })
+    await flushPromises()
+    expect(wrapper.text()).toContain('自动进行第 2 / 3 次尝试')
+    expect(wrapper.text()).toMatch(/16,?000/)
+    expect(wrapper.text()).toMatch(/(?:提升|提高|升至|增加)/)
+    const firstAttempt = wrapper.findAll('li').find(item => item.text().includes('第 1 次'))
+    expect(firstAttempt?.text()).toMatch(/8,?000/)
+    expect(firstAttempt?.text()).not.toMatch(/16,?000/)
+    expect(wrapper.text()).not.toContain('作品质量复核')
+  })
+
+  it('shows the actual cap for each completed attempt after a successful upgrade', async () => {
+    api.run.mockResolvedValue({
+      ...completed(), max_tokens: 8000, effective_max_tokens: 16000, retry_max_tokens: null,
+      attempt_count: 2, max_attempts: 3, retry_at: null,
+      attempts: [
+        { attempt: 1, max_tokens: 8000, started_at: 1000, finished_at: 2100, duration_ms: 1100, error: 'truncated_output', usage: null },
+        { attempt: 2, max_tokens: 16000, started_at: 5000, finished_at: 10000, duration_ms: 5000, error: null, usage: { input_tokens: 10, output_tokens: 9000 } },
+      ],
+    })
+    const wrapper = mount(CheckRunDialog, { props: { runId: 'completed-upgrade' }, global })
+    await flushPromises()
+    const rows = wrapper.findAll('li')
+    expect(rows.find(item => item.text().includes('第 1 次'))?.text()).toMatch(/8,?000/)
+    expect(rows.find(item => item.text().includes('第 2 次'))?.text()).toMatch(/16,?000/)
+    expect(rows.find(item => item.text().includes('第 2 次'))?.text()).toContain('生成完成')
+    expect(wrapper.text()).toContain('基础检查通过')
+    expect(wrapper.text()).not.toContain('自动进行第 3')
+  })
+
+  it('shows comparison as reference only when effective output limits differ despite matching original caps', async () => {
+    api.run.mockImplementation(async (id: string) => ({ ...completed(), id, max_tokens: 8000, ...(id === 'upgraded-run' ? { effective_max_tokens: 16000 } : {}) }))
+    const wrapper = mount(CheckRunDialog, { props: { runId: 'upgraded-run', baselineId: 'legacy-baseline' }, global })
+    await flushPromises()
+    await button(wrapper, '对比基准').trigger('click')
+    expect(wrapper.text()).toContain('不计算基准分差')
+  })
 })
