@@ -48,6 +48,14 @@ jobs:
           go test -tags=unit ./internal/server -run '^TestAPIContracts$' -count=1
           go test -tags=unit ./internal/repository -run '^TestUserSubscriptionGetByIDForUpdateLocksRow$' -count=1
           go test -tags=unit ./internal/pkg/modelcheckbridge ./internal/config ./internal/server/middleware ./internal/server/routes ./internal/service -run ModelCheck -count=1
+      - name: Verify upstream quota, pricing and stream compatibility
+        working-directory: backend
+        shell: bash
+        run: |
+          set -euo pipefail
+          go test -tags=unit ./internal/service -run 'Test.*OpenAIAutoReset|TestOpenAIQuotaAutoResetService|TestClaudeReset|TestEvaluateAccountSchedulingThreshold|TestEvaluateAnthropicFableSchedulingThreshold|TestOpenAIGatewayService_SelectAccountWithScheduler|TestNewModelPricing|TestGetModelPricing|TestCalculateCost|TestResolveAccountStatsCost|TestTryModelFilePricing|TestAnthropicChatStreamAuthoritativeUsage|TestTransportErrorHandlers_ClientDisconnect|TestAntigravityCompatTransportError_ClientDisconnect|TestAntigravityWriteGoogleError_ClientClosed' -count=1
+          go test -tags=unit ./internal/pkg/apicompat ./internal/pkg/antigravity ./internal/pkg/googleapi -count=1
+          go test -tags=unit ./internal/handler -run 'TestGatewayHandlerPreCancelled|TestGatewayEnsureForwardErrorResponse|TestGeminiV1BetaModels_ClientCancel|TestGatewayChatCompletions_GeminiClientCancel|TestOpenAIResponsesWebSocket_Composite' -count=1
       - uses: pnpm/action-setup@v6
         with:
           version: 9
