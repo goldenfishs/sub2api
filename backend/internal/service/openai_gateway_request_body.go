@@ -1333,7 +1333,10 @@ func normalizeOpenAIOAuthResponsesCompatibilityBody(body []byte) ([]byte, bool, 
 }
 
 func normalizeGPT6ResponsesSampling(body []byte, model string) ([]byte, bool, error) {
-	if !openai.IsGPT6SolOrLunaModelSpelling(model) || gjson.GetBytes(body, "reasoning.effort").String() == "none" {
+	if err := validateGPT61SolReasoning(body, model); err != nil {
+		return body, false, err
+	}
+	if !openai.IsGPT61SolModelSpelling(model) && (!openai.IsGPT6SolOrLunaModelSpelling(model) || gjson.GetBytes(body, "reasoning.effort").String() == "none") {
 		return body, false, nil
 	}
 	out := body
@@ -1432,6 +1435,9 @@ func normalizeOpenAIResponseFormatSchemasBody(body []byte) ([]byte, bool, error)
 func normalizeOpenAIResponsesWebSocketCompatibilityBody(body []byte, account *Account, responsesLite bool) ([]byte, bool, error) {
 	if account == nil || !account.IsOpenAI() {
 		return body, false, nil
+	}
+	if err := validateGPT61SolReasoning(body, account.GetMappedModel(gjson.GetBytes(body, "model").String())); err != nil {
+		return body, false, err
 	}
 	normalized := body
 	changed := false

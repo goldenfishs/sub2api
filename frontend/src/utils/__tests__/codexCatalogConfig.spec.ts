@@ -7,6 +7,18 @@ import {
 } from '@/utils/codexCatalogConfig'
 
 describe('codexCatalogConfig', () => {
+  it('selects the exact GPT-6.1 Sol catalog descriptor and its medium default', () => {
+    const content = JSON.stringify({ models: [
+      { slug: 'gpt-6-sol', default_reasoning_level: 'none', supported_reasoning_levels: [{ effort: 'none' }] },
+      { slug: 'gpt-6-astra', default_reasoning_level: 'high', supported_reasoning_levels: [{ effort: 'high' }] },
+      { slug: 'gpt-6.1-sol', default_reasoning_level: 'medium', supported_reasoning_levels: ['low', 'medium', 'high', 'xhigh', 'max'].map(effort => ({ effort })) }
+    ] })
+    const model = findCodexCatalogModel(content, 'gpt-6.1-sol')
+    expect(model?.slug).toBe('gpt-6.1-sol')
+    expect(selectCodexConfigReasoningEffort(model)).toBe('medium')
+    expect(formatCodexReasoningEffortTomlLine(selectCodexConfigReasoningEffort(model))).toBe('model_reasoning_effort = "medium"\n')
+  })
+
   it('parses catalog slugs and finds a model by id', () => {
     const content = JSON.stringify({
       models: [
