@@ -58,6 +58,22 @@ function mountTable(
 }
 
 describe('PlazaModelPricingTable', () => {
+  it('keeps GPT-6.1 Sol pricing distinct from older Sol and Astra entries', () => {
+    const prices = { input_price: 2e-6, output_price: 1e-5, cache_write_price: 2.5e-6, cache_read_price: 1e-7 }
+    const current = tokenModel({ name: 'gpt-6.1-sol', platform: 'openai', official_pricing: prices })
+    Object.assign(current.pricing!, prices)
+    const older = tokenModel({ name: 'gpt-6-sol', platform: 'openai' })
+    const astra = tokenModel({ name: 'gpt-6-astra', platform: 'openai' })
+    const wrapper = mountTable([current, older, astra], 1)
+    const rows = wrapper.findAll('tbody tr')
+    expect(rows).toHaveLength(3)
+    const row = rows.find(item => item.find('td').text().includes('gpt-6.1-sol'))!
+    for (const price of ['$2.00', '$10.00', '$2.50', '$0.10']) expect(row.text()).toContain(price)
+    expect(row.text()).not.toContain('$15.00')
+    expect(rows.find(item => item.find('td').text().includes('gpt-6-sol'))!.text()).toContain('$15.00')
+    wrapper.unmount()
+  })
+
   it.each([
     { enabled: true, multiplier: 1, userRate: 0.05, expected: 1 },
     { enabled: true, multiplier: 0.5, userRate: null, expected: 0.5 },

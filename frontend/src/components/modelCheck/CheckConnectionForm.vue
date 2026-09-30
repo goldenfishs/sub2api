@@ -27,7 +27,7 @@
       <p class="mc-field-note"><Icon name="lock" size="xs" />{{ admin ? t('modelCheck.adminKeyHint') : t('modelCheck.keyHint') }}</p>
     </fieldset>
     <div class="mc-form-row">
-      <label class="mc-field"><span>{{ t('modelCheck.model') }}</span><input v-model.trim="form.model" placeholder="gpt-6-astra" list="mc-model-options" required maxlength="160" /><datalist id="mc-model-options"><option value="gpt-6-astra" /><option value="gpt-5.6-sol" /><option value="gpt-5.6-terra" /></datalist></label>
+      <label class="mc-field"><span>{{ t('modelCheck.model') }}</span><input v-model.trim="form.model" placeholder="gpt-6-astra" list="mc-model-options" required maxlength="160" /><datalist id="mc-model-options"><option value="gpt-6-astra" /><option value="gpt-6.1-sol" /><option value="gpt-5.6-sol" /><option value="gpt-5.6-terra" /></datalist></label>
       <label class="mc-field"><span>{{ t('modelCheck.reasoning') }}</span><select v-model="form.reasoning"><option value="default">{{ t('modelCheck.defaultReasoning') }}</option><option v-for="level in ['low', 'medium', 'high']" :key="level" :value="level">{{ t(`modelCheck.${level}`) }}</option></select></label>
     </div>
     <details class="mc-advanced">

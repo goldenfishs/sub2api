@@ -53,8 +53,8 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          go test -tags=unit ./internal/service -run 'Test.*OpenAIAutoReset|TestOpenAIQuotaAutoResetService|TestClaudeReset|TestEvaluateAccountSchedulingThreshold|TestEvaluateAnthropicFableSchedulingThreshold|TestOpenAIGatewayService_SelectAccountWithScheduler|TestNewModelPricing|TestGetModelPricing|TestCalculateCost|TestResolveAccountStatsCost|TestTryModelFilePricing|TestAnthropicChatStreamAuthoritativeUsage|TestTransportErrorHandlers_ClientDisconnect|TestAntigravityCompatTransportError_ClientDisconnect|TestAntigravityWriteGoogleError_ClientClosed' -count=1
-          go test -tags=unit ./internal/pkg/apicompat ./internal/pkg/antigravity ./internal/pkg/googleapi -count=1
+          go test -tags=unit ./internal/service -run 'TestGPT61Sol|TestGPT6|TestNormalizeCodex|TestNormalizeOpenAI|Test.*OpenAIAutoReset|TestOpenAIQuotaAutoResetService|TestClaudeReset|TestEvaluateAccountSchedulingThreshold|TestEvaluateAnthropicFableSchedulingThreshold|TestOpenAIGatewayService_SelectAccountWithScheduler|TestNewModelPricing|TestGetModelPricing|TestCalculateCost|TestResolveAccountStatsCost|TestTryModelFilePricing|TestAnthropicChatStreamAuthoritativeUsage|TestTransportErrorHandlers_ClientDisconnect|TestAntigravityCompatTransportError_ClientDisconnect|TestAntigravityWriteGoogleError_ClientClosed' -count=1
+          go test -tags=unit ./internal/pkg/openai ./internal/pkg/apicompat ./internal/pkg/antigravity ./internal/pkg/googleapi -count=1
           go test -tags=unit ./internal/handler -run 'TestGatewayHandlerPreCancelled|TestGatewayEnsureForwardErrorResponse|TestGeminiV1BetaModels_ClientCancel|TestGatewayChatCompletions_GeminiClientCancel|TestOpenAIResponsesWebSocket_Composite' -count=1
       - uses: pnpm/action-setup@v6
         with:
@@ -68,7 +68,7 @@ jobs:
         working-directory: frontend
         run: |
           pnpm install --frozen-lockfile
-          pnpm exec vitest run src/views/user/__tests__/SubscriptionsView.advanceMonth.spec.ts src/utils/__tests__/featureFlags.spec.ts src/components/modelCheck/__tests__
+          pnpm exec vitest run src/views/user/__tests__/SubscriptionsView.advanceMonth.spec.ts src/utils/__tests__/featureFlags.spec.ts src/components/modelCheck/__tests__ src/components/keys/__tests__/UseKeyModal.spec.ts src/composables/__tests__/useModelWhitelist.spec.ts src/components/modelPlaza/__tests__/PlazaModelPricingTable.spec.ts src/utils/__tests__/codexCatalogConfig.spec.ts
           pnpm run build
 
   verify-model-check:
