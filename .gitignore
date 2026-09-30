@@ -135,6 +135,7 @@ vite.config.js
 docs/*
 !docs/LUMIVIA_MONTHLY_RESET_LOCAL.md
 !docs/LUMIVIA_UPGRADE_0.2.8.md
+!docs/LUMIVIA_UPGRADE_0.2.10.md
 !docs/ANTIGRAVITY_ATTRIBUTION_429.md
 !docs/PAYMENT.md
 !docs/PAYMENT_CN.md
