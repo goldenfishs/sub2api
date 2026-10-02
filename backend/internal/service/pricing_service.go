@@ -74,7 +74,6 @@ var (
 		Mode:                                "chat",
 		SupportsPromptCaching:               true,
 	}
-	// GPT-6.1 Sol official rates (2026-09-30); cached input is 5% of input.
 	openAIGPT61SolFallbackPricing = &LiteLLMModelPricing{
 		InputCostPerToken:                   2e-6,
 		InputCostPerTokenPriority:           4e-6,
@@ -1540,19 +1539,12 @@ func (s *PricingService) matchOpenAIModel(model string) *LiteLLMModelPricing {
 		}
 	}
 
-	// Match the released Sol version before generic GPT variants or older models.
 	if openai.IsGPT61SolModelSpelling(model) {
 		if pricing, ok := s.pricingData["gpt-6.1-sol"]; ok {
 			return pricing
 		}
 		return openAIGPT61SolFallbackPricing
 	}
-	// Unknown Sol suffixes must not inherit a broader GPT-6.1 or default card.
-	// Explicit catalog entries have already been checked before this fallback.
-	if strings.HasPrefix(model, "gpt-6.1-sol") {
-		return nil
-	}
-
 	if openai.IsGPT6SolOrLunaModelSpelling(model) {
 		if pricing, ok := s.pricingData[normalizeKnownOpenAICodexModel(model)]; ok {
 			return pricing

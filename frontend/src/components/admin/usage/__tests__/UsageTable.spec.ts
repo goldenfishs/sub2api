@@ -58,6 +58,8 @@ const messages: Record<string, string> = {
   'usage.stream': 'Stream',
   'usage.sync': 'Sync',
   'usage.nativeCompactionV2': 'Compaction',
+  'usage.averageTps': 'Avg TPS',
+  'usage.averageTpsHint': 'Output tokens divided by total duration, including the wait for the first token.',
   'admin.usage.billingModeToken': 'Token',
   'admin.usage.billingModePerRequest': 'Per request',
   'admin.usage.billingModeImage': 'Image',
@@ -93,6 +95,7 @@ const DataTableStub = {
         <slot name="cell-billing_mode" :row="row" />
         <slot name="cell-tokens" :row="row" />
         <slot name="cell-cost" :row="row" />
+        <slot name="cell-latency" :row="row" />
         <slot name="cell-request_id" :row="row" />
         <slot name="cell-upstream_request_id" :row="row" />
       </div>
@@ -127,6 +130,31 @@ const baseImageRow = {
   image_size_source: null,
   image_size_breakdown: null,
 }
+
+describe('UsageTable average output speed', () => {
+  it.each([true, false])('uses the same total-duration TPS with account billing shown: %s', (showAccountBilling) => {
+    const wrapper = mount(UsageTable, {
+      props: {
+        data: [
+          { ...baseImageRow, billing_mode: 'token', request_id: 'stream', output_tokens: 230, duration_ms: 31270, first_token_ms: 17270, stream: true },
+          { ...baseImageRow, billing_mode: 'token', request_id: 'sync', output_tokens: 230, duration_ms: 31270, first_token_ms: null, stream: false },
+          { ...baseImageRow, request_id: 'missing', output_tokens: null, duration_ms: 31270 },
+          { ...baseImageRow, request_id: 'zero-duration', output_tokens: 230, duration_ms: 0 },
+        ],
+        columns: [{ key: 'latency', label: 'Latency' }],
+        showAccountBilling,
+      },
+      global: {
+        stubs: { DataTable: DataTableStub, EmptyState: true, Icon: true, Teleport: true },
+      },
+    })
+
+    expect(wrapper.findAll('[data-testid="usage-average-tps"]').map((cell) => cell.text())).toEqual([
+      '7.4 tokens/s', '7.4 tokens/s', '-', '-',
+    ])
+    expect(wrapper.get('[data-testid="usage-average-tps"]').attributes('title')).toContain('including the wait for the first token')
+  })
+})
 
 describe('admin UsageTable tooltip', () => {
   beforeEach(() => {

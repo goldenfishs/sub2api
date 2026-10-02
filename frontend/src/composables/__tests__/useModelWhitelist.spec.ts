@@ -17,8 +17,8 @@ describe('useModelWhitelist', () => {
     expect(models).toContain('gpt-5.6')
     expect(models).toContain('gpt-6')
     expect(models).toContain('gpt-6-astra')
+    expect(models).toContain('gpt-6.1-sol')
     expect(models).toContain('gpt-6-sol')
-    expect(models.filter(model => model === 'gpt-6.1-sol')).toHaveLength(1)
     expect(models).toContain('gpt-6-luna')
   })
 
