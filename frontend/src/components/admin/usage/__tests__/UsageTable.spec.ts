@@ -59,7 +59,7 @@ const messages: Record<string, string> = {
   'usage.sync': 'Sync',
   'usage.nativeCompactionV2': 'Compaction',
   'usage.averageTps': 'Avg TPS',
-  'usage.averageTpsHint': 'Output tokens divided by total duration, including the wait for the first token.',
+  'usage.averageTpsHint': 'Output tokens divided by total duration minus first-token latency.',
   'admin.usage.billingModeToken': 'Token',
   'admin.usage.billingModePerRequest': 'Per request',
   'admin.usage.billingModeImage': 'Image',
@@ -132,7 +132,7 @@ const baseImageRow = {
 }
 
 describe('UsageTable average output speed', () => {
-  it.each([true, false])('uses the same total-duration TPS with account billing shown: %s', (showAccountBilling) => {
+  it.each([true, false])('uses the same TPS excluding first-token latency with account billing shown: %s', (showAccountBilling) => {
     const wrapper = mount(UsageTable, {
       props: {
         data: [
@@ -150,9 +150,9 @@ describe('UsageTable average output speed', () => {
     })
 
     expect(wrapper.findAll('[data-testid="usage-average-tps"]').map((cell) => cell.text())).toEqual([
-      '7.4 tokens/s', '7.4 tokens/s', '-', '-',
+      '16.4 tokens/s', '-', '-', '-',
     ])
-    expect(wrapper.get('[data-testid="usage-average-tps"]').attributes('title')).toContain('including the wait for the first token')
+    expect(wrapper.get('[data-testid="usage-average-tps"]').attributes('title')).toContain('minus first-token latency')
   })
 })
 

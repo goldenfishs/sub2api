@@ -396,7 +396,7 @@ export default {
     latencyFirstToken: 'First',
     latencyDuration: 'Total',
     averageTps: 'Avg TPS',
-    averageTpsHint: 'Average output speed = output tokens ÷ total duration in seconds, including the wait for the first token.',
+    averageTpsHint: 'Average output speed = output tokens ÷ (total duration − first-token latency) in seconds. Shows "-" when first-token timing is missing or generation time is invalid.',
     time: 'Time',
     ws: 'WS',
     stream: 'Stream',
