@@ -242,11 +242,6 @@ func skipOpenAIWSJSONValue(payload []byte, i int) int {
 }
 
 func prepareOpenAIWSHTTPBridgeBody(account *Account, payload []byte) ([]byte, error) {
-	if account != nil {
-		if err := validateGPT61SolReasoning(payload, account.GetMappedModel(gjson.GetBytes(payload, "model").String())); err != nil {
-			return nil, err
-		}
-	}
 	var body map[string]any
 	if err := decodeOpenAIJSONUseNumber(payload, &body); err != nil {
 		return nil, err

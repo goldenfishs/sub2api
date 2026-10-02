@@ -9,10 +9,8 @@ const openaiModels = [
   'gpt-5.2-pro', 'gpt-5.2-pro-2025-12-11',
 	// GPT-5.6 系列
   'gpt-5.6', 'gpt-5.6-sol', 'gpt-5.6-terra', 'gpt-5.6-luna',
-  // GPT-6.1 系列
-  'gpt-6.1-sol',
   // GPT-6 系列
-  'gpt-6', 'gpt-6-astra', 'gpt-6-sol', 'gpt-6-luna',
+  'gpt-6', 'gpt-6-astra', 'gpt-6.1-sol', 'gpt-6-sol', 'gpt-6-luna',
   // GPT-5.5 系列
   'gpt-5.5',
   // GPT-5.4 系列
@@ -477,6 +475,7 @@ export function getModelsByPlatform(platform: string): string[] {
       'qwen3.8-max', 'qwen3.8-flash', 'qwen3.7-max', 'qwen3.7-plus', 'qwen3.6-plus',
       'hy4-preview', 'hy3', 'omen-alpha'
     ]
+    case 'typesafe': return ['jev-latest']
     case 'doubao': return doubaoModels
     case 'minimax': return minimaxModels
     case 'baidu': return baiduModels
