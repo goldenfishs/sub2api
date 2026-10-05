@@ -209,7 +209,14 @@ test('truncated retries preserve idempotency and report effective limits without
   let count = 0;
   const { call, app, channel, generated } = await harness(t, {
     beforeClose: release, retryWait: async () => { await gate; },
-    generate: async () => { if (++count === 1) throw new CheckError('truncated_output', 502); return { html: artifact.html, usage: { output_tokens: 20 } }; },
+    generate: async () => {
+      if (++count === 1) {
+        const error = new CheckError('truncated_output', 502);
+        error.usage = { input_tokens: 25, output_tokens: 8000, private_message: 'must-not-persist' };
+        throw error;
+      }
+      return { html: artifact.html, usage: { output_tokens: 20 } };
+    },
   });
   const request = { method: 'POST', headers: { 'Idempotency-Key': 'token-retry-same-run' }, body: { channel_id: channel.id } };
   const submitted = await call('/admin/tests', request);
@@ -217,7 +224,7 @@ test('truncated retries preserve idempotency and report effective limits without
   assert.equal(waiting.status, 'generating');
   assert.equal(waiting.max_tokens, 8000);
   assert.equal(waiting.effective_max_tokens, 8000);
-  assert.equal(waiting.retry_max_tokens, 16000);
+  assert.equal(waiting.retry_max_tokens, 32768);
   assert.equal(waiting.last_attempt_error, 'truncated_output');
   assert.equal((await call('/admin/tests', request)).data.id, submitted.data.id);
   assert.equal(generated.length, 1);
@@ -226,9 +233,11 @@ test('truncated retries preserve idempotency and report effective limits without
   assert.equal(done.id, submitted.data.id);
   assert.equal(done.status, 'normal');
   assert.equal(done.max_tokens, 8000);
-  assert.equal(done.effective_max_tokens, 16000);
+  assert.equal(done.effective_max_tokens, 32768);
   assert.equal(done.retry_max_tokens, null);
-  assert.deepEqual(done.attempts.map(attempt => attempt.max_tokens), [8000, 16000]);
+  assert.deepEqual(done.attempts.map(attempt => attempt.max_tokens), [8000, 32768]);
+  assert.deepEqual(done.attempts[0].usage, { input_tokens: 25, output_tokens: 8000, cached_tokens: null });
+  assert.ok(!JSON.stringify(done).includes('must-not-persist'));
   assert.equal(app.store.channel(channel.id).max_tokens, 8000);
   assert.equal(app.store.listRuns().length, 1);
   assert.equal(generated[0].run.id, generated[1].run.id);
@@ -236,15 +245,15 @@ test('truncated retries preserve idempotency and report effective limits without
   assert.equal(generated[0].run.seed, generated[1].run.seed);
   assert.equal(generated[0].credential, generated[1].credential);
   const listed = (await call('/admin/runs?channel_id=' + channel.id)).data[0];
-  assert.equal(listed.effective_max_tokens, 16000);
-  assert.deepEqual(listed.attempts.map(attempt => attempt.max_tokens), [8000, 16000]);
+  assert.equal(listed.effective_max_tokens, 32768);
+  assert.deepEqual(listed.attempts.map(attempt => attempt.max_tokens), [8000, 32768]);
   const baseline = await call(`/admin/channels/${channel.id}/baseline`, { method: 'POST', key: null, bearer: 'fixture-admin', body: { run_id: done.id } });
-  assert.equal(baseline.status, 400, 'a 16000-token result is not a matching baseline for an 8000-token monitor');
+  assert.equal(baseline.status, 400, 'a 32768-token result is not a matching baseline for an 8000-token monitor');
   assert.equal(baseline.reason, 'invalid_baseline');
 });
 
 test('baseline comparison uses effective attempt limits, including legacy fallback', async t => {
-  for (const baselineCap of [8000, 16000]) {
+  for (const baselineCap of [8000, 16000, 32768]) {
     await t.test('baseline ' + baselineCap, async sub => {
       let failNext = false;
       const { call, app, channel } = await harness(sub, { generate: async () => {
@@ -256,8 +265,8 @@ test('baseline comparison uses effective attempt limits, including legacy fallba
       app.store.setBaseline(channel.id, first.id);
       failNext = true;
       const current = (await call('/admin/tests', { method: 'POST', body: { channel_id: channel.id, wait_seconds: 2 } })).data;
-      assert.equal(current.effective_max_tokens, 16000);
-      assert.equal(current.assessment.delta, baselineCap === 16000 ? 0 : null);
+      assert.equal(current.effective_max_tokens, 32768);
+      assert.equal(current.assessment.delta, baselineCap === 32768 ? 0 : null);
     });
   }
 });

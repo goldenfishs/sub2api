@@ -34,7 +34,7 @@
       <summary>{{ t('modelCheck.advanced') }}<Icon name="chevronDown" size="xs" /></summary>
       <div class="mc-form-row">
         <label class="mc-field"><span>{{ t('modelCheck.protocol') }}</span><select v-model="form.protocol"><option value="responses">Responses</option><option value="chat">Chat Completions</option></select></label>
-        <label class="mc-field"><span>{{ t('modelCheck.maxTokens') }}</span><input v-model.number="form.max_tokens" type="number" min="1024" max="16000" step="1" required /></label>
+        <label class="mc-field"><span>{{ t('modelCheck.maxTokens') }}</span><input v-model.number="form.max_tokens" type="number" min="1024" max="32768" step="1" required /></label>
       </div>
     </details>
   </div>

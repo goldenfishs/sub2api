@@ -1,4 +1,5 @@
 import { StringDecoder } from 'node:string_decoder';
+import { usageOf } from './usage.mjs';
 
 // Keep only output text and usage, never arbitrary upstream error bodies.
 // Errors are stable codes converted to CheckError at the transport boundary.
@@ -7,12 +8,16 @@ export function createModelStream(protocol) {
   const parts = new Map();
   let buffer = '', data = [], event = '', textBytes = 0, eventBytes = 0;
   let chatText = '', finishReason = null, usage = null, result = null;
-  const fail = code => { throw new Error(code); };
+  const fail = (code, rawUsage = null) => {
+    const error = new Error(code);
+    if (code === 'truncated_output' && rawUsage) error.usage = usageOf({ usage: rawUsage });
+    throw error;
+  };
   const incomplete = response => {
     const reason = response?.incomplete_details?.reason;
     // Legacy compatible providers omit the reason. Explicit non-token reasons
     // must not trigger another billed generation with a higher output limit.
-    fail(reason == null || reason === 'max_output_tokens' ? 'truncated_output' : 'upstream_error');
+    fail(reason == null || reason === 'max_output_tokens' ? 'truncated_output' : 'upstream_error', response?.usage);
   };
   const text = value => {
     if (typeof value !== 'string') fail('invalid_upstream_response');
@@ -66,7 +71,7 @@ export function createModelStream(protocol) {
       if (choice.delta?.content != null) chatText += text(choice.delta.content);
       if (choice.finish_reason != null) {
         finishReason = choice.finish_reason;
-        if (finishReason === 'length') fail('truncated_output');
+        if (finishReason === 'length') fail('truncated_output', usage);
         if (finishReason !== 'stop') fail('upstream_error');
       }
     }

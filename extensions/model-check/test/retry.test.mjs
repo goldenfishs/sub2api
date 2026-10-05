@@ -16,14 +16,15 @@ test('only explicit temporary transport errors permit retries', () => {
   }
   assert.equal(retryable(Object.assign(new Error('secret response body'), { code: 'upstream_http:502' })), false);
   assert.equal(retryable(new CheckError('truncated_output'), 8000), true);
-  assert.equal(retryable(new CheckError('truncated_output'), 16000), false);
+  assert.equal(retryable(new CheckError('truncated_output'), 16000), true);
+  assert.equal(retryable(new CheckError('truncated_output'), 32768), false);
 });
 
-test('truncation raises only attempt options to 16000 and mixed failures share the three-attempt budget', async () => {
+test('truncation raises only attempt options to 32768 and mixed failures share the three-attempt budget', async () => {
   for (const [errors, expectedCaps] of [
-    [['truncated_output'], [8000, 16000]],
-    [['upstream_http:502', 'truncated_output'], [8000, 8000, 16000]],
-    [['truncated_output', 'upstream_http:502'], [8000, 16000, 16000]],
+    [['truncated_output'], [8000, 32768]],
+    [['upstream_http:502', 'truncated_output'], [8000, 8000, 32768]],
+    [['truncated_output', 'upstream_http:502'], [8000, 32768, 32768]],
   ]) {
     const run = { id: 'fixed-run', prompt: 'fixed-prompt', seed: 42, max_tokens: 8000 };
     const credential = { key: 'fixture-key' }; const caps = []; const waits = []; let persisted = {};
@@ -41,8 +42,8 @@ test('truncation raises only attempt options to 16000 and mixed failures share t
     assert.deepEqual(caps, expectedCaps);
     assert.deepEqual(waits, [2000, 5000].slice(0, expectedCaps.length - 1));
     assert.deepEqual(persisted.attempts.map(attempt => attempt.max_tokens), expectedCaps);
-    assert.equal(result.effective_max_tokens, 16000);
-    assert.equal(persisted.effective_max_tokens, 16000);
+    assert.equal(result.effective_max_tokens, 32768);
+    assert.equal(persisted.effective_max_tokens, 32768);
     assert.equal(persisted.retry_max_tokens, null);
     assert.equal(run.max_tokens, 8000);
   }
@@ -50,8 +51,8 @@ test('truncation raises only attempt options to 16000 and mixed failures share t
 
 test('truncation at the ceiling and exhausted mixed failures never add another attempt', async () => {
   for (const [initialCap, errors, expectedCaps] of [
-    [16000, ['truncated_output'], [16000]],
-    [8000, ['truncated_output', 'truncated_output'], [8000, 16000]],
+    [32768, ['truncated_output'], [32768]],
+    [8000, ['truncated_output', 'truncated_output'], [8000, 32768]],
     [8000, ['upstream_http:502', 'upstream_http:502', 'truncated_output'], [8000, 8000, 8000]],
   ]) {
     const caps = []; let persisted = {};
@@ -118,7 +119,7 @@ test('restart fails interrupted retry jobs without replay and clears their count
   try {
     const path = join(directory, 'state.sqlite'); store = new Store(path);
     const run = store.createRun({ model: 'fixture-model', prompt: 'fixed', seed: 42 });
-    store.updateRun(run.id, { status: 'generating', attempt_count: 1, effective_max_tokens: 8000, retry_max_tokens: 16000, retry_at: Date.now() + 5000, last_attempt_error: 'truncated_output' });
+    store.updateRun(run.id, { status: 'generating', attempt_count: 1, effective_max_tokens: 8000, retry_max_tokens: 32768, retry_at: Date.now() + 5000, last_attempt_error: 'truncated_output' });
     store.close(); store = new Store(path);
     const recovered = store.run(run.id);
     assert.equal(recovered.status, 'failed');

@@ -1,8 +1,9 @@
 import { setTimeout as sleep } from 'node:timers/promises';
 import { CheckError } from './security.mjs';
+import { MAX_OUTPUT_TOKENS } from './prompts.mjs';
+import { usageOf } from './usage.mjs';
 
 export const MAX_ATTEMPTS = 3;
-const MAX_OUTPUT_TOKENS = 16000;
 const delays = [2000, 5000];
 const temporaryErrors = new Set([
   'upstream_timeout', 'upstream_disconnected', 'connection_failed', 'upstream_limit:429',
@@ -35,7 +36,8 @@ export async function generateWithRetry({ run, credential, trustedBase, generate
     } catch (error) {
       const finished_at = now();
       lastError = error instanceof CheckError ? error.code : 'test_failed';
-      attempts.push({ attempt, started_at, finished_at, duration_ms: Math.max(0, finished_at - started_at), max_tokens: maxTokens, error: lastError, usage: null });
+      const usage = lastError === 'truncated_output' && error instanceof CheckError && error.usage ? usageOf({ usage: error.usage }) : null;
+      attempts.push({ attempt, started_at, finished_at, duration_ms: Math.max(0, finished_at - started_at), max_tokens: maxTokens, error: lastError, usage });
       const shouldRetry = attempt < MAX_ATTEMPTS && retryable(error, maxTokens) && !signal.aborted;
       const nextMaxTokens = lastError === 'truncated_output' ? MAX_OUTPUT_TOKENS : maxTokens;
       update({ attempts: [...attempts], last_attempt_error: lastError, retry_at: shouldRetry ? finished_at + delays[attempt - 1] : null, retry_max_tokens: shouldRetry ? nextMaxTokens : null });
