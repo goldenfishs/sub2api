@@ -83,7 +83,10 @@ func TestCallProvider_BasePath(t *testing.T) {
 		{"openai chat version", MonitorProviderOpenAI, "", "/relay/v1/", "/relay/v1/chat/completions"},
 		{"openai responses version", MonitorProviderOpenAI, MonitorAPIModeResponses, "/relay/v1", "/relay/v1/responses"},
 		{"gemini version", MonitorProviderGemini, "", "/relay/v1beta", "/relay/v1beta/models/test-model:generateContent"},
+		{"zhipu relay origin", MonitorProviderZhipu, "", "", "/v1/chat/completions"},
+		{"zhipu relay version", MonitorProviderZhipu, "", "/tenant/v1", "/tenant/v1/chat/completions"},
 		{"zhipu version", MonitorProviderZhipu, "", "/api/paas/v4", "/api/paas/v4/chat/completions"},
+		{"zhipu coding version", MonitorProviderZhipu, "", "/api/coding/paas/v4", "/api/coding/paas/v4/chat/completions"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			_, _, status, err := callProvider(context.Background(), tc.provider,
@@ -91,6 +94,26 @@ func TestCallProvider_BasePath(t *testing.T) {
 			require.NoError(t, err)
 			require.Equal(t, http.StatusOK, status)
 			require.Equal(t, tc.wantPath, <-requests)
+		})
+	}
+}
+
+func TestZhipuMonitorChatPath_OfficialHostsAndCustomRelay(t *testing.T) {
+	for _, tc := range []struct {
+		endpoint string
+		want     string
+	}{
+		{"https://open.bigmodel.cn", providerZhipuPath},
+		{"https://api.z.ai", providerZhipuPath},
+		{"https://OPEN.BIGMODEL.CN:443", providerZhipuPath},
+		{"https://api.lumivia.cn", providerOpenAIPath},
+		{"https://open.bigmodel.cn.relay.example", providerOpenAIPath},
+		{"https://relay.example/tenant/v1", "/chat/completions"},
+		{"https://relay.example/tenant/api/paas/v4", "/chat/completions"},
+		{"https://relay.example/tenant/api/coding/paas/v4", "/chat/completions"},
+	} {
+		t.Run(tc.endpoint, func(t *testing.T) {
+			require.Equal(t, tc.want, zhipuMonitorChatPath(tc.endpoint))
 		})
 	}
 }
