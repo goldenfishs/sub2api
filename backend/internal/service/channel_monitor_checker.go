@@ -297,7 +297,11 @@ func callProvider(ctx context.Context, provider, endpoint, apiKey, model, prompt
 		return "", "", 0, err
 	}
 	headers := mergeHeaders(adapter.buildHeaders(apiKey), opts)
-	full := joinURL(endpoint, adapter.buildPath(model))
+	path := adapter.buildPath(model)
+	if provider == MonitorProviderZhipu {
+		path = zhipuMonitorChatPath(endpoint)
+	}
+	full := joinURL(endpoint, path)
 	respBytes, status, err := postRawJSON(ctx, full, body, headers)
 	if err != nil {
 		return "", "", status, err
@@ -306,6 +310,29 @@ func callProvider(ctx context.Context, provider, endpoint, apiKey, model, prompt
 		return extractOpenAIResponsesText(respBytes), string(respBytes), status, nil
 	}
 	return extractMonitorResponseText(adapter, respBytes), string(respBytes), status, nil
+}
+
+// zhipuMonitorChatPath uses the official API path only for the official hosts.
+// A custom endpoint is an OpenAI-compatible relay unless its base URL already
+// selects a Zhipu API version. In particular, a relay's /v1 must not receive
+// /api/paas/v4/chat/completions just because the monitor is labelled Zhipu.
+func zhipuMonitorChatPath(endpoint string) string {
+	u, err := url.Parse(endpoint)
+	if err != nil {
+		return providerOpenAIPath
+	}
+	basePath := strings.TrimRight(u.EscapedPath(), "/")
+	for _, prefix := range []string{"/api/paas/v4", "/api/coding/paas/v4", "/v1"} {
+		if strings.HasSuffix(basePath, prefix) {
+			return "/chat/completions"
+		}
+	}
+	switch strings.ToLower(u.Hostname()) {
+	case "open.bigmodel.cn", "api.z.ai":
+		return providerZhipuPath
+	default:
+		return providerOpenAIPath
+	}
 }
 
 func extractMonitorResponseText(adapter providerAdapter, respBytes []byte) string {
