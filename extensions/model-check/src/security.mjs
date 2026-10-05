@@ -6,6 +6,7 @@ import { readFileSync, writeFileSync, mkdirSync, chmodSync } from 'node:fs';
 import { join } from 'node:path';
 import ipaddr from 'ipaddr.js';
 import { createModelStream } from './stream.mjs';
+import { usageOf } from './usage.mjs';
 
 export class CheckError extends Error {
   constructor(code, status = 400) { super(code); this.code = code; this.status = status; }
@@ -125,7 +126,12 @@ export async function requestJSON(endpoint, { method = 'POST', key = '', body, t
       }
       const streaming = streamProtocol && String(res.headers['content-type']).split(';')[0].trim().toLowerCase() === 'text/event-stream';
       const parser = streaming ? createModelStream(streamProtocol) : null;
-      const streamError = error => new CheckError(['upstream_error', 'truncated_output', 'upstream_disconnected', 'response_too_large'].includes(error.message) ? error.message : 'invalid_upstream_response', 502);
+      const streamError = error => {
+        const code = ['upstream_error', 'truncated_output', 'upstream_disconnected', 'response_too_large'].includes(error.message) ? error.message : 'invalid_upstream_response';
+        const failure = new CheckError(code, 502);
+        if (code === 'truncated_output' && error.usage) failure.usage = usageOf({ usage: error.usage });
+        return failure;
+      };
       let size = 0; const chunks = [];
       res.on('data', chunk => {
         if (settled) return;

@@ -1,6 +1,7 @@
 import { createHash, randomInt } from 'node:crypto';
 
 export const PROMPT_VERSION = 'svg-observation-v3';
+export const MAX_OUTPUT_TOKENS = 32768;
 export const TOPICS = [
   { id: 'pelican', name: '鹈鹕骑行', name_en: 'Pelican ride', description: '观察角色、车轮与踩踏动作的配合', description_en: 'Character, wheels and coordinated pedalling', color: 'mint' },
   { id: 'creative', name: '随机创作', name_en: 'Random creation', description: '每轮抽取主题、角色、元素、场景、动作、风格与配色', description_en: 'A new theme, character, elements, scene, action, style and palette each time', color: 'sky' },
@@ -44,6 +45,6 @@ export function validateOptions(input = {}) {
   const reasoning = input.reasoning || 'default';
   if (!['default', 'low', 'medium', 'high'].includes(reasoning)) throw new Error('invalid_reasoning');
   const max_tokens = Number(input.max_tokens ?? 8000);
-  if (!Number.isInteger(max_tokens) || max_tokens < 1024 || max_tokens > 16000) throw new Error('invalid_token_limit');
+  if (!Number.isInteger(max_tokens) || max_tokens < 1024 || max_tokens > MAX_OUTPUT_TOKENS) throw new Error('invalid_token_limit');
   return { model, topic, protocol, reasoning, max_tokens };
 }

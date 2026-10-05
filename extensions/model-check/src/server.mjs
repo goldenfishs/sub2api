@@ -9,6 +9,7 @@ import { renderArtwork, assess } from './render.mjs';
 import { sampleHTML } from './samples.mjs';
 import { API_PREFIX, apiRun, prepareAPITest, waitForResult, sendImage, isFinished } from './integration.mjs';
 import { generateWithRetry } from './retry.mjs';
+import { usageOf } from './usage.mjs';
 
 const PREFIX = API_PREFIX;
 const activeStatuses = ['queued', 'generating', 'rendering'];
@@ -29,12 +30,6 @@ async function readBody(req) {
   return body;
 }
 
-function usageOf(data) {
-  const u = data.usage; if (!u) return null;
-  const safe = value => Number.isFinite(value) && value >= 0 ? Math.floor(value) : null;
-  return { input_tokens: safe(u.input_tokens ?? u.prompt_tokens), output_tokens: safe(u.output_tokens ?? u.completion_tokens), cached_tokens: safe(u.input_tokens_details?.cached_tokens ?? u.prompt_tokens_details?.cached_tokens) };
-}
-
 export async function generateRun(run, credential, trustedBase) {
   const route = run.protocol === 'responses' ? 'responses' : 'chat/completions';
   const endpoint = await resolveEndpoint(credential.base_url, route, credential.trusted ? trustedBase : '');
@@ -50,9 +45,15 @@ export async function generateRun(run, credential, trustedBase) {
   if (data.error) throw new CheckError('upstream_error', 502);
   if (data.status === 'incomplete') {
     const reason = data.incomplete_details?.reason;
-    throw new CheckError(reason == null || reason === 'max_output_tokens' ? 'truncated_output' : 'upstream_error', 502);
+    const failure = new CheckError(reason == null || reason === 'max_output_tokens' ? 'truncated_output' : 'upstream_error', 502);
+    if (failure.code === 'truncated_output') failure.usage = usageOf(data);
+    throw failure;
   }
-  if (data.choices?.[0]?.finish_reason === 'length') throw new CheckError('truncated_output', 502);
+  if (data.choices?.[0]?.finish_reason === 'length') {
+    const failure = new CheckError('truncated_output', 502);
+    failure.usage = usageOf(data);
+    throw failure;
+  }
   if (['failed', 'cancelled'].includes(data.status) || data.choices?.[0]?.finish_reason === 'content_filter') throw new CheckError('upstream_error', 502);
   let html = data.output_text || data.output?.flatMap(item => item.content || []).filter(c => c.type === 'output_text').map(c => c.text).join('');
   if (run.protocol === 'chat') {

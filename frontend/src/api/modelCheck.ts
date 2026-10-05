@@ -30,7 +30,7 @@ export interface CheckRun extends CheckOptions {
   generation_ms?: number | null
   tps?: number | null
   total_ms?: number
-  usage?: { input_tokens: number | null; output_tokens: number | null; cached_tokens: number | null } | null
+  usage?: { input_tokens: number | null; output_tokens: number | null; cached_tokens: number | null; reasoning_tokens?: number } | null
   quality_review?: { verdict: 'normal' | 'degraded'; reviewed_at: number } | null
   assessment?: { score: number; verdict: string; delta: number | null; reasons: string[]; dimensions: { id: string; score: number; max: number }[]; semantic_review: string; method: string }
   label?: string

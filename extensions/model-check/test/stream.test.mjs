@@ -104,6 +104,26 @@ for (const [type, expected] of [['response.incomplete', 'truncated_output'], ['r
   });
 }
 
+test('a truncated Responses stream retains only billed token counts for the failed attempt', async t => {
+  let calls = 0;
+  const fixture = await upstream(t, (_req, res) => {
+    sse(res);
+    if (++calls === 2) { res.end(event(completed())); return; }
+    res.end(event({ type: 'response.incomplete', response: {
+      status: 'incomplete', incomplete_details: { reason: 'max_output_tokens' },
+      usage: { input_tokens: 25, output_tokens: 8000, output_tokens_details: { reasoning_tokens: 7300 }, private_message: secret },
+    } }));
+  });
+  let persisted = {};
+  await generateWithRetry({ run, credential: {}, signal: new AbortController().signal,
+    generate: options => fixture.generate('responses', options),
+    update: fields => { persisted = { ...persisted, ...fields }; }, wait: async () => {},
+  });
+  assert.deepEqual(fixture.seen.map(request => request.body.max_output_tokens), [8000, 32768]);
+  assert.deepEqual(persisted.attempts[0].usage, { input_tokens: 25, output_tokens: 8000, cached_tokens: null, reasoning_tokens: 7300 });
+  assert.ok(!JSON.stringify(persisted).includes(secret));
+});
+
 for (const [reason, expected] of [['length', 'truncated_output'], ['content_filter', 'upstream_error']]) {
   test(`Chat rejects ${reason} despite receiving partial HTML`, async t => {
     const fixture = await upstream(t, (_req, res) => { sse(res); res.end(event(chat(html)) + event(chat('', reason)) + 'data: [DONE]\n\n'); });
@@ -131,8 +151,8 @@ for (const type of ['response.incomplete', 'response.completed']) {
       if (retryExpected) {
         const result = await pending;
         assert.equal(result.html, html);
-        assert.equal(result.effective_max_tokens, 16000);
-        assert.deepEqual(fixture.seen.map(request => request.body.max_output_tokens), [8000, 16000]);
+        assert.equal(result.effective_max_tokens, 32768);
+        assert.deepEqual(fixture.seen.map(request => request.body.max_output_tokens), [8000, 32768]);
       } else {
         await assert.rejects(pending, safeFailure('upstream_error'));
         assert.equal(calls, 1, 'non-token incompletion must not cause another billed request');

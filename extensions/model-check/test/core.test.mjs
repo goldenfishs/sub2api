@@ -93,6 +93,11 @@ test('only two prompt modes are accepted; random schedules resample while pelica
   for (const value of first.conditions) assert.ok(first.prompt.includes(value));
 });
 
+test('the output limit accepts 32768 and rejects larger requests', () => {
+  assert.equal(validateOptions({ model: 'fixture-model', max_tokens: 32768 }).max_tokens, 32768);
+  assert.throws(() => validateOptions({ model: 'fixture-model', max_tokens: 32769 }), /invalid_token_limit/);
+});
+
 test('HTML preview removes scripts, embedded documents, resource links and unsafe animation targets', () => {
   const result = sanitizeArtwork(`<html><head><meta http-equiv="refresh" content="0;url=https://evil.test"><script>fetch('secret')</script></head><body onload="steal()"><iframe src="https://evil.test"></iframe><svg><a href="javascript:alert(1)"><circle r="9"/></a><animate attributeName="href" to="https://evil.test"/><use href="https://evil.test/a.svg"/></svg></body></html>`);
   assert.ok(!/<script|<iframe|onload=|javascript:|attributeName="href"|href="https:/i.test(result.html));

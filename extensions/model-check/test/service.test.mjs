@@ -171,6 +171,23 @@ test('Responses JSON incomplete reasons distinguish token limits from content fi
   }
 });
 
+test('nonstream incomplete responses expose only numeric usage for retry accounting', async t => {
+  const upstream = http.createServer((_req, res) => {
+    res.setHeader('Content-Type', 'application/json');
+    res.end(JSON.stringify({ status: 'incomplete', incomplete_details: { reason: 'max_output_tokens' },
+      usage: { input_tokens: 25, output_tokens: 16000, private_message: 'must-not-persist' } }));
+  });
+  await new Promise(resolve => upstream.listen(0, '127.0.0.1', resolve));
+  t.after(() => new Promise(resolve => upstream.close(resolve)));
+  const base = `http://127.0.0.1:${upstream.address().port}/v1`;
+  await assert.rejects(generateRun({ ...options, prompt: 'fixture' }, { key: 'fixture', base_url: base, trusted: true }, base), error => {
+    assert.equal(error.code, 'truncated_output');
+    assert.deepEqual(error.usage, { input_tokens: 25, output_tokens: 16000, cached_tokens: null });
+    assert.ok(!JSON.stringify(error).includes('must-not-persist'));
+    return true;
+  });
+});
+
 test('group names come from the owned key and remain attached to each historical work', async t => {
   const { app, call, finished, setGroup } = await harness(t);
   const forged = { group_id: 999, group_name: 'Forged group' };
