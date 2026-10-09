@@ -297,11 +297,7 @@ func callProvider(ctx context.Context, provider, endpoint, apiKey, model, prompt
 		return "", "", 0, err
 	}
 	headers := mergeHeaders(adapter.buildHeaders(apiKey), opts)
-	path := adapter.buildPath(model)
-	if provider == MonitorProviderZhipu {
-		path = zhipuMonitorChatPath(endpoint)
-	}
-	full := joinURL(endpoint, path)
+	full := joinURL(endpoint, monitorRequestPath(provider, endpoint, adapter, model))
 	respBytes, status, err := postRawJSON(ctx, full, body, headers)
 	if err != nil {
 		return "", "", status, err
@@ -310,29 +306,6 @@ func callProvider(ctx context.Context, provider, endpoint, apiKey, model, prompt
 		return extractOpenAIResponsesText(respBytes), string(respBytes), status, nil
 	}
 	return extractMonitorResponseText(adapter, respBytes), string(respBytes), status, nil
-}
-
-// zhipuMonitorChatPath uses the official API path only for the official hosts.
-// A custom endpoint is an OpenAI-compatible relay unless its base URL already
-// selects a Zhipu API version. In particular, a relay's /v1 must not receive
-// /api/paas/v4/chat/completions just because the monitor is labelled Zhipu.
-func zhipuMonitorChatPath(endpoint string) string {
-	u, err := url.Parse(endpoint)
-	if err != nil {
-		return providerOpenAIPath
-	}
-	basePath := strings.TrimRight(u.EscapedPath(), "/")
-	for _, prefix := range []string{"/api/paas/v4", "/api/coding/paas/v4", "/v1"} {
-		if strings.HasSuffix(basePath, prefix) {
-			return "/chat/completions"
-		}
-	}
-	switch strings.ToLower(u.Hostname()) {
-	case "open.bigmodel.cn", "api.z.ai":
-		return providerZhipuPath
-	default:
-		return providerOpenAIPath
-	}
 }
 
 func extractMonitorResponseText(adapter providerAdapter, respBytes []byte) string {
@@ -581,6 +554,37 @@ func postRawJSON(ctx context.Context, fullURL string, payload []byte, headers ma
 		return nil, resp.StatusCode, fmt.Errorf("read body: %w", err)
 	}
 	return respBody, resp.StatusCode, nil
+}
+
+// monitorRequestPath 返回探测请求路径。智谱按 endpoint 区分：
+//   - 已带 /paas/v4（含 Coding Plan 的 /api/coding/paas/v4）：只追加 /chat/completions
+//   - 官方域名根地址：/api/paas/v4/chat/completions
+//   - 中转站 / 本站网关：只暴露 OpenAI 兼容的 /v1/chat/completions，与 Kimi / DeepSeek 一致
+func monitorRequestPath(provider, endpoint string, adapter providerAdapter, model string) string {
+	if provider != MonitorProviderZhipu {
+		return adapter.buildPath(model)
+	}
+	u, err := url.Parse(strings.TrimSpace(endpoint))
+	if err != nil {
+		return providerOpenAIPath
+	}
+	if strings.Contains(u.EscapedPath(), "/paas/v4") {
+		return "/chat/completions"
+	}
+	if isZhipuOfficialHost(u) {
+		return adapter.buildPath(model)
+	}
+	return providerOpenAIPath
+}
+
+func isZhipuOfficialHost(u *url.URL) bool {
+	host := strings.ToLower(u.Hostname())
+	for _, official := range []string{"bigmodel.cn", "z.ai"} {
+		if host == official || strings.HasSuffix(host, "."+official) {
+			return true
+		}
+	}
+	return false
 }
 
 // joinURL 保留 base 的上游路径前缀，并避免重复追加已有的 API 路径前缀。
