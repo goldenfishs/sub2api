@@ -250,7 +250,7 @@ func (s *AccountTestService) probeOpenAIServiceTier(ctx context.Context, account
 	if err != nil {
 		return finish(0, nil, err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	body, err := readOpenAITierProbeBody(resp.Body)
 	return finish(resp.StatusCode, body, err)
 }
@@ -263,8 +263,8 @@ func readOpenAITierProbeBody(reader io.Reader) ([]byte, error) {
 	var body bytes.Buffer
 	for scanner.Scan() {
 		line := scanner.Bytes()
-		body.Write(line)
-		body.WriteByte('\n')
+		_, _ = body.Write(line)
+		_ = body.WriteByte('\n')
 		if body.Len() > 1<<20 {
 			return nil, fmt.Errorf("probe response exceeds limit")
 		}

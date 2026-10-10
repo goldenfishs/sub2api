@@ -256,7 +256,8 @@ func TestServiceTierProbeTransportAndPersistence(t *testing.T) {
 		require.True(t, gjson.GetBytes(upstream.bodies[i], "stream").Bool())
 		select {
 		case update := <-updates:
-			c := update[openAITierProbeKey("mapped-astra", tier)].(OpenAIServiceTierCapability)
+			c, ok := update[openAITierProbeKey("mapped-astra", tier)].(OpenAIServiceTierCapability)
+			require.True(t, ok)
 			require.Equal(t, "supported", c.Status)
 			require.Equal(t, openAITierProbeFingerprint(&a), c.Fingerprint)
 		default:
