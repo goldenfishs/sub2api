@@ -48,6 +48,9 @@ func (s *ScheduledTestRunnerService) Start() {
 		return
 	}
 	s.startOnce.Do(func() {
+		if s.accountTestSvc != nil && s.accountTestSvc.tierProber != nil {
+			s.accountTestSvc.tierProber.start()
+		}
 		loc := time.Local
 		if s.cfg != nil {
 			if parsed, err := time.LoadLocation(s.cfg.Timezone); err == nil && parsed != nil {
@@ -73,6 +76,9 @@ func (s *ScheduledTestRunnerService) Stop() {
 		return
 	}
 	s.stopOnce.Do(func() {
+		if s.accountTestSvc != nil && s.accountTestSvc.tierProber != nil {
+			s.accountTestSvc.tierProber.stop()
+		}
 		if s.cron != nil {
 			ctx := s.cron.Stop()
 			select {

@@ -3371,3 +3371,27 @@ func sanitizeExtraBaseRPM(extra map[string]any) {
 	}
 	extra["base_rpm"] = v
 }
+
+// ProbeServiceTiers queues bounded probes; it does not change account status.
+func (h *AccountHandler) ProbeServiceTiers(c *gin.Context) {
+	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	if err != nil || id <= 0 {
+		response.BadRequest(c, "Invalid account ID")
+		return
+	}
+	var req struct {
+		Model string `json:"model"`
+	}
+	if c.Request.ContentLength > 0 {
+		if err := c.ShouldBindJSON(&req); err != nil {
+			response.BadRequest(c, "Invalid request")
+			return
+		}
+	}
+	queued, err := h.accountTestService.QueueOpenAIServiceTierProbe(c.Request.Context(), id, strings.TrimSpace(req.Model))
+	if err != nil {
+		response.BadRequest(c, err.Error())
+		return
+	}
+	response.Success(c, gin.H{"queued": queued})
+}

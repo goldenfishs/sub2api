@@ -1,5 +1,16 @@
 export default {
     accounts: {
+      tierProbe: {
+        "description": "自动检查 Astra / GPT-6.1 Sol 的 Fast / Ultrafast，每 6 小时刷新；探测会消耗少量上游额度。仅确认对应档位才优先调度，全部不可用后降级普通。悬停查看各模型结果。",
+        "supported": "已确认部分模型",
+        "unsupported": "不支持",
+        "unknown": "待确认",
+        "error": "探测失败",
+        "expired": "已过期",
+        "unprobed": "未探测",
+        "recheck": "重测",
+        "queued": "已排队，稍后刷新"
+      },
       title: '账号管理',
       description: '管理 AI 平台账号和 Cookie',
       createAccount: '添加账号',
