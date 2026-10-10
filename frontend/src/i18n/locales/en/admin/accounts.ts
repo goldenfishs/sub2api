@@ -1,5 +1,16 @@
 export default {
     accounts: {
+      tierProbe: {
+        "description": "Checks Astra / GPT-6.1 Sol Fast / Ultrafast every 6 hours using small paid probes. Confirmed model/tier accounts are preferred; standard is used only when none are available. Hover for per-model results.",
+        "supported": "Confirmed models",
+        "unsupported": "Unsupported",
+        "unknown": "Unconfirmed",
+        "error": "Probe failed",
+        "expired": "Expired",
+        "unprobed": "Not checked",
+        "recheck": "Recheck",
+        "queued": "Queued; refresh shortly"
+      },
       title: 'Account Management',
       description: 'Manage AI platform accounts and credentials',
       createAccount: 'Create Account',

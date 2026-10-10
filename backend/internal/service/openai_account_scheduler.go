@@ -1776,6 +1776,10 @@ func (s *defaultOpenAIAccountScheduler) isAccountRequestCompatibleReason(ctx con
 	if account == nil {
 		return false, "account_nil"
 	}
+	if !openAITierCandidateEligible(ctx, account, req.RequestedModel) {
+		return false, "service_tier_unconfirmed"
+	}
+
 	if source, ok := CompositeRouteSourceFromContext(ctx); ok && source == CompositeRouteSourceAccount {
 		if publicModel, modelOK := RequestedPublicModelFromContext(ctx); modelOK && !explicitModelMappingClaims(*account, publicModel) {
 			return false, "account_model_not_owned"
@@ -2161,6 +2165,29 @@ func (s *OpenAIGatewayService) SelectAccountWithSchedulerForImages(
 // quarantine checks bypassed, so healthy proxies always win the first pass
 // and quarantined ones only serve when nothing else can.
 func (s *OpenAIGatewayService) selectAccountWithScheduler(
+	ctx context.Context,
+	groupID *int64,
+	previousResponseID string,
+	sessionHash string,
+	requestedModel string,
+	excludedIDs map[int64]struct{},
+	requiredTransport OpenAIUpstreamTransport,
+	requiredCapability OpenAIEndpointCapability,
+	requiredImageCapability OpenAIImagesCapability,
+	requireCompact bool,
+	platform string,
+	previousResponseCanMove bool,
+	useUpstreamTokenCost bool,
+) (*AccountSelectionResult, OpenAIAccountScheduleDecision, error) {
+	if NormalizeOpenAICompatiblePlatform(platform) == PlatformOpenAI && requiredImageCapability == "" {
+		return s.selectAccountWithServiceTier(ctx, groupID, requestedModel, excludedIDs, func(passCtx context.Context, ids map[int64]struct{}) (*AccountSelectionResult, OpenAIAccountScheduleDecision, error) {
+			return s.selectAccountWithSchedulerWithoutTier(passCtx, groupID, previousResponseID, sessionHash, requestedModel, ids, requiredTransport, requiredCapability, requiredImageCapability, requireCompact, platform, previousResponseCanMove, useUpstreamTokenCost)
+		})
+	}
+	return s.selectAccountWithSchedulerWithoutTier(ctx, groupID, previousResponseID, sessionHash, requestedModel, excludedIDs, requiredTransport, requiredCapability, requiredImageCapability, requireCompact, platform, previousResponseCanMove, useUpstreamTokenCost)
+}
+
+func (s *OpenAIGatewayService) selectAccountWithSchedulerWithoutTier(
 	ctx context.Context,
 	groupID *int64,
 	previousResponseID string,

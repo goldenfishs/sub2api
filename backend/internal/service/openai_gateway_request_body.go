@@ -2061,6 +2061,14 @@ func openAIGroupForcesFast(ctx context.Context, account *Account) bool {
 // 入口没有这一前置步骤，pass 路径下若不在此处归一化，"fast" 就会被原样
 // 透传到 OpenAI 上游导致 400/拒绝。把归一化收敛到本函数，所有入口行为一致。
 func (s *OpenAIGatewayService) applyOpenAIFastPolicyToBody(ctx context.Context, account *Account, model string, body []byte) ([]byte, error) {
+	updated, err := s.applyOpenAIFastPolicyToBodyBeforeRouting(ctx, account, model, body)
+	if err != nil {
+		return updated, err
+	}
+	return applyOpenAITierRoutingFallback(ctx, account, updated)
+}
+
+func (s *OpenAIGatewayService) applyOpenAIFastPolicyToBodyBeforeRouting(ctx context.Context, account *Account, model string, body []byte) ([]byte, error) {
 	if len(body) == 0 {
 		return body, nil
 	}
@@ -2169,6 +2177,23 @@ func writeOpenAIFastPolicyBlockedResponse(c *gin.Context, err *OpenAIFastBlocked
 // The caller is responsible for choosing the upstream model passed in —
 // this helper does not re-derive it.
 func (s *OpenAIGatewayService) applyOpenAIFastPolicyToWSResponseCreate(
+	ctx context.Context,
+	account *Account,
+	model string,
+	frame []byte,
+) ([]byte, *OpenAIFastBlockedError, error) {
+	updated, blocked, err := s.applyOpenAIFastPolicyToWSResponseCreateBeforeRouting(ctx, account, model, frame)
+	if err != nil || blocked != nil {
+		return updated, blocked, err
+	}
+	if gjson.GetBytes(updated, "type").String() != "response.create" {
+		return updated, nil, nil
+	}
+	updated, err = applyOpenAITierRoutingFallback(ctx, account, updated)
+	return updated, nil, err
+}
+
+func (s *OpenAIGatewayService) applyOpenAIFastPolicyToWSResponseCreateBeforeRouting(
 	ctx context.Context,
 	account *Account,
 	model string,

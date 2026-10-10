@@ -282,6 +282,7 @@
                 <span :class="['h-1.5 w-1.5 rounded-full', getOpenAICompactMeta(row)?.dotClass]" />
                 <span>{{ getOpenAICompactMeta(row)?.label }}</span>
               </div>
+              <OpenAIServiceTierBadge :account="row" />
             </div>
           </template>
           <template #cell-capacity="{ row }">
@@ -491,6 +492,7 @@
 </template>
 
 <script setup lang="ts">
+import OpenAIServiceTierBadge from '@/components/account/OpenAIServiceTierBadge.vue'
 import { ref, reactive, computed, onMounted, onUnmounted, toRaw, watch } from 'vue'
 import { useIntervalFn } from '@vueuse/core'
 import { useI18n } from 'vue-i18n'

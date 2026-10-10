@@ -277,6 +277,8 @@ func ProvideAccountTestService(
 	)
 	service.agentIdentityWS = openAIGatewayService
 	service.SetOpenAIGatewayService(openAIGatewayService)
+	service.tierProber = newOpenAIServiceTierProber(service)
+	openAIGatewayService.tierProber = service.tierProber
 	service.SetSettingService(settingService)
 	service.SetPluginManager(pluginManager)
 	return service
