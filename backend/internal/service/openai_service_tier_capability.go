@@ -138,6 +138,9 @@ type openAITierRequiredKey struct{}
 type openAITierCandidatePolicy func(*Account, string) string
 
 func openAITierCandidateEligible(ctx context.Context, account *Account, model string) bool {
+	if forwarded, ok := openAIForwardModelFromContext(ctx); ok {
+		model = forwarded.model
+	}
 	requirement := ctx.Value(openAITierRequiredKey{})
 	if policy, ok := requirement.(openAITierCandidatePolicy); ok {
 		tier := policy(account, model)
@@ -199,6 +202,9 @@ func (s *OpenAIGatewayService) selectAccountWithServiceTier(ctx context.Context,
 		return selectFn(ctx, excluded)
 	}
 	tier := r.requestedTier()
+	if forwarded, ok := openAIForwardModelFromContext(ctx); ok {
+		model = forwarded.model
+	}
 	// Account-scoped policy can force priority or filter the client's tier.
 	// Evaluate the same policy as forwarding before checking each capability.
 	policy := openAITierCandidatePolicy(func(a *Account, model string) string {

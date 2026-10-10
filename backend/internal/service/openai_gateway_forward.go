@@ -726,6 +726,15 @@ func (s *OpenAIGatewayService) Forward(ctx context.Context, c *gin.Context, acco
 			requestView = newOpenAIRequestView(body)
 		}
 	}
+	// Native Responses has an optimized policy/patch path. Apply the scheduler's
+	// ordinary fallback after those patches, before both transport and billing.
+	if fallbackBody, fallbackErr := applyOpenAITierRoutingFallback(ctx, account, body); fallbackErr != nil {
+		return nil, fallbackErr
+	} else if !bytes.Equal(fallbackBody, body) {
+		body = fallbackBody
+		requestView = newOpenAIRequestView(body)
+		reqBody = nil
+	}
 	// Run after orphan-output filtering and all request-map rebuilds so a
 	// compaction trigger cannot remain ahead of surviving history items.
 	if normalizedBody, changed, normalizeErr := NormalizeCompactionTriggerInputOrder(body); normalizeErr != nil {

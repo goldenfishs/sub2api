@@ -1,17 +1,20 @@
 package service
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
 	"io"
 	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/Wei-Shaw/sub2api/internal/config"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/ctxkey"
+	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/require"
 	"github.com/tidwall/gjson"
 )
@@ -296,4 +299,60 @@ func TestServiceTierHeaderChangeInvalidatesCapability(t *testing.T) {
 	before := openAITierProbeFingerprint(&a)
 	a.Credentials["header_overrides"] = map[string]any{"x-route": "two"}
 	require.NotEqual(t, before, openAITierProbeFingerprint(&a))
+}
+
+func TestServiceTierNativeResponsesFallbackReachesWire(t *testing.T) {
+	for _, accountType := range []string{AccountTypeAPIKey, AccountTypeOAuth} {
+		t.Run(accountType, func(t *testing.T) {
+			gin.SetMode(gin.TestMode)
+			a := tierTestAccount(9, "")
+			a.Type = accountType
+			a.Credentials["access_token"] = "test"
+			body := []byte(`{"model":"gpt-6-astra","instructions":"test","input":"hi","stream":true,"service_tier":"ultrafast"}`)
+			ctx := WithOpenAIServiceTierRouting(context.Background(), body)
+			openAITierRouting(ctx).selectTier("default", a.ID)
+			c, _ := gin.CreateTestContext(httptest.NewRecorder())
+			c.Request = httptest.NewRequest(http.MethodPost, "/v1/responses", bytes.NewReader(body)).WithContext(ctx)
+			upstream := &httpUpstreamRecorder{err: errors.New("stop after wire capture")}
+			svc := &OpenAIGatewayService{cfg: &config.Config{}, httpUpstream: upstream}
+			_, err := svc.Forward(ctx, c, &a, body)
+			require.Error(t, err)
+			require.NotNil(t, upstream.lastReq)
+			require.Equal(t, "default", gjson.GetBytes(upstream.lastBody, "service_tier").String())
+		})
+	}
+}
+
+func TestServiceTierChannelForwardModelIsUsed(t *testing.T) {
+	a := tierTestAccount(1, "priority")
+	ctx := WithOpenAIForwardModel(context.Background(), "gpt-6-astra", false)
+	ctx = context.WithValue(ctx, openAITierRequiredKey{}, "priority")
+	require.True(t, openAITierCandidateEligible(ctx, &a, "public-alias"))
+	require.False(t, openAITierCandidateEligible(context.WithValue(context.Background(), openAITierRequiredKey{}, "priority"), &a, "public-alias"))
+}
+
+func TestServiceTierConvertedProtocolsFallbackReachesWire(t *testing.T) {
+	for _, protocol := range []string{"chat", "messages"} {
+		t.Run(protocol, func(t *testing.T) {
+			gin.SetMode(gin.TestMode)
+			a := tierTestAccount(10, "")
+			body := []byte(`{"model":"gpt-6-astra","messages":[{"role":"user","content":"hi"}],"max_tokens":32,"stream":true,"service_tier":"priority"}`)
+			ctx := WithOpenAIServiceTierRouting(context.Background(), body)
+			openAITierRouting(ctx).selectTier("default", a.ID)
+			c, _ := gin.CreateTestContext(httptest.NewRecorder())
+			c.Request = httptest.NewRequest(http.MethodPost, "/v1/"+protocol, bytes.NewReader(body)).WithContext(ctx)
+			c.Request.Header.Set("anthropic-beta", "fast-mode-2026-02-01")
+			upstream := &httpUpstreamRecorder{err: errors.New("stop after wire capture")}
+			svc := &OpenAIGatewayService{cfg: &config.Config{}, httpUpstream: upstream}
+			var err error
+			if protocol == "chat" {
+				_, err = svc.ForwardAsChatCompletions(ctx, c, &a, body, "", "")
+			} else {
+				_, err = svc.ForwardAsAnthropic(ctx, c, &a, body, "", "")
+			}
+			require.Error(t, err)
+			require.NotNil(t, upstream.lastReq)
+			require.Equal(t, "default", gjson.GetBytes(upstream.lastBody, "service_tier").String())
+		})
+	}
 }

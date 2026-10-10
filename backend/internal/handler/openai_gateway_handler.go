@@ -18,6 +18,7 @@ import (
 
 	"github.com/Wei-Shaw/sub2api/internal/config"
 	"github.com/Wei-Shaw/sub2api/internal/domain"
+	"github.com/Wei-Shaw/sub2api/internal/pkg/claude"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/ctxkey"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/ip"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/logger"
@@ -1207,7 +1208,14 @@ func (h *OpenAIGatewayHandler) Messages(c *gin.Context) {
 		return
 	}
 
-	c.Request = c.Request.WithContext(service.WithOpenAIServiceTierRouting(c.Request.Context(), body))
+	tierRoutingBody := body
+	for _, beta := range strings.Split(c.GetHeader("anthropic-beta"), ",") {
+		if strings.TrimSpace(beta) == claude.BetaFastMode {
+			tierRoutingBody = []byte(`{"service_tier":"priority"}`)
+			break
+		}
+	}
+	c.Request = c.Request.WithContext(service.WithOpenAIServiceTierRouting(c.Request.Context(), tierRoutingBody))
 
 	modelResult := gjson.GetBytes(body, "model")
 	if !modelResult.Exists() || modelResult.Type != gjson.String || modelResult.String() == "" {
