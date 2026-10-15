@@ -190,7 +190,7 @@ func (s *OpenAIGatewayService) Forward(ctx context.Context, c *gin.Context, acco
 		// 账号映射未命中时以去除首尾空白的请求模型兜底，计费名与上游模型名一致。
 		return s.forwardResponsesViaNativeAnthropic(ctx, c, account, body, reqModel)
 	case APIProtocolChatCompletions:
-		return s.forwardResponsesViaRawChatCompletions(ctx, c, account, body)
+		return s.forwardResponsesViaRawChatCompletions(ctx, c, account, body, startTime)
 	}
 	SetActualOpenAIUpstreamEndpoint(c, openAIResponsesUpstreamEndpoint)
 	if account.IsOpenAI() && (account.IsOpenAIApiKey() || account.IsOpenAIOAuthLike()) {
@@ -725,15 +725,6 @@ func (s *OpenAIGatewayService) Forward(ctx context.Context, c *gin.Context, acco
 			}
 			requestView = newOpenAIRequestView(body)
 		}
-	}
-	// Native Responses has an optimized policy/patch path. Apply the scheduler's
-	// ordinary fallback after those patches, before both transport and billing.
-	if fallbackBody, fallbackErr := applyOpenAITierRoutingFallback(ctx, account, body); fallbackErr != nil {
-		return nil, fallbackErr
-	} else if !bytes.Equal(fallbackBody, body) {
-		body = fallbackBody
-		requestView = newOpenAIRequestView(body)
-		reqBody = nil
 	}
 	// Run after orphan-output filtering and all request-map rebuilds so a
 	// compaction trigger cannot remain ahead of surviving history items.

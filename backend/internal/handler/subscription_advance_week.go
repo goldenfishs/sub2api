@@ -79,5 +79,5 @@ func (h *SubscriptionHandler) SetAutoAdvanceWeek(c *gin.Context) {
 		response.ErrorFrom(c, err)
 		return
 	}
-	response.Success(c, dto.UserSubscriptionFromService(sub))
+	response.Success(c, dto.UserSubscriptionFromService(sub).Localized(c.GetHeader("Accept-Language")))
 }
