@@ -40,6 +40,7 @@ export interface ContentModerationConfig {
   block_status: number
   block_message: string
   email_on_hit: boolean
+  auto_ban_only_cyber_policy?: boolean
   auto_ban_enabled: boolean
   ban_threshold: number
   violation_window_hours: number
@@ -125,6 +126,7 @@ export interface UpdateContentModerationConfig {
   block_status?: number
   block_message?: string
   email_on_hit?: boolean
+  auto_ban_only_cyber_policy?: boolean
   auto_ban_enabled?: boolean
   ban_threshold?: number
   violation_window_hours?: number
