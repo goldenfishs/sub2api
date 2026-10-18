@@ -74,7 +74,7 @@ jobs:
         working-directory: frontend
         run: |
           pnpm install --frozen-lockfile
-          pnpm exec vitest run src/views/user/__tests__/SubscriptionsView.advanceMonth.spec.ts src/utils/__tests__/featureFlags.spec.ts src/components/modelCheck/__tests__ src/components/keys/__tests__/UseKeyModal.spec.ts src/composables/__tests__/useModelWhitelist.spec.ts src/components/modelPlaza/__tests__/PlazaModelPricingTable.spec.ts src/utils/__tests__/codexCatalogConfig.spec.ts src/utils/__tests__/usageThroughput.spec.ts src/components/admin/usage/__tests__/UsageTable.spec.ts src/views/user/__tests__/UsageView.spec.ts src/views/admin/__tests__/UsageView.spec.ts
+          pnpm exec vitest run src/views/admin/__tests__/RiskControlView.spec.ts src/views/user/__tests__/SubscriptionsView.advanceMonth.spec.ts src/utils/__tests__/featureFlags.spec.ts src/components/modelCheck/__tests__ src/components/keys/__tests__/UseKeyModal.spec.ts src/composables/__tests__/useModelWhitelist.spec.ts src/components/modelPlaza/__tests__/PlazaModelPricingTable.spec.ts src/utils/__tests__/codexCatalogConfig.spec.ts src/utils/__tests__/usageThroughput.spec.ts src/components/admin/usage/__tests__/UsageTable.spec.ts src/views/user/__tests__/UsageView.spec.ts src/views/admin/__tests__/UsageView.spec.ts
           pnpm run build
 
   verify-model-check:

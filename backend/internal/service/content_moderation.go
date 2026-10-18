@@ -140,12 +140,13 @@ func ContentModerationCategories() []string {
 }
 
 type ContentModerationConfig struct {
-	Engine   string                         `json:"engine,omitempty"`
-	TypeSafe *ContentModerationEngineConfig `json:"typesafe,omitempty"`
-	Enabled  bool                           `json:"enabled"`
-	Mode     string                         `json:"mode"`
-	BaseURL  string                         `json:"base_url"`
-	Model    string                         `json:"model"`
+	AutoBanOnlyCyberPolicy bool                           `json:"auto_ban_only_cyber_policy"`
+	Engine                 string                         `json:"engine,omitempty"`
+	TypeSafe               *ContentModerationEngineConfig `json:"typesafe,omitempty"`
+	Enabled                bool                           `json:"enabled"`
+	Mode                   string                         `json:"mode"`
+	BaseURL                string                         `json:"base_url"`
+	Model                  string                         `json:"model"`
 	// ProxyID 指定审计请求使用的代理服务器（IP管理-代理服务器），nil 表示直连。
 	ProxyID              *int64                       `json:"proxy_id,omitempty"`
 	APIKey               string                       `json:"api_key,omitempty"`
@@ -178,6 +179,7 @@ type ContentModerationConfig struct {
 }
 
 type ContentModerationConfigView struct {
+	AutoBanOnlyCyberPolicy         bool                                    `json:"auto_ban_only_cyber_policy"`
 	Engine                         string                                  `json:"engine"`
 	EngineConfigs                  map[string]*ContentModerationConfigView `json:"engine_configs,omitempty"`
 	Enabled                        bool                                    `json:"enabled"`
@@ -274,12 +276,13 @@ type ContentModerationTestAuditResult struct {
 }
 
 type UpdateContentModerationConfigInput struct {
-	Engine        *string                                       `json:"engine"`
-	EngineConfigs map[string]UpdateContentModerationEngineInput `json:"engine_configs"`
-	Enabled       *bool                                         `json:"enabled"`
-	Mode          *string                                       `json:"mode"`
-	BaseURL       *string                                       `json:"base_url"`
-	Model         *string                                       `json:"model"`
+	AutoBanOnlyCyberPolicy *bool                                         `json:"auto_ban_only_cyber_policy"`
+	Engine                 *string                                       `json:"engine"`
+	EngineConfigs          map[string]UpdateContentModerationEngineInput `json:"engine_configs"`
+	Enabled                *bool                                         `json:"enabled"`
+	Mode                   *string                                       `json:"mode"`
+	BaseURL                *string                                       `json:"base_url"`
+	Model                  *string                                       `json:"model"`
 	// ProxyID nil 表示不修改；<=0 表示清除代理（恢复直连）；>0 表示指定代理。
 	ProxyID                        *int64                        `json:"proxy_id"`
 	APIKey                         *string                       `json:"api_key"`
@@ -659,6 +662,9 @@ func (s *ContentModerationService) UpdateConfig(ctx context.Context, input Updat
 	}
 	if input.EmailOnHit != nil {
 		cfg.EmailOnHit = *input.EmailOnHit
+	}
+	if input.AutoBanOnlyCyberPolicy != nil {
+		cfg.AutoBanOnlyCyberPolicy = *input.AutoBanOnlyCyberPolicy
 	}
 	if input.AutoBanEnabled != nil {
 		cfg.AutoBanEnabled = *input.AutoBanEnabled
@@ -1972,8 +1978,13 @@ func (s *ContentModerationService) applyFlaggedAccountSideEffects(ctx context.Co
 	if s == nil || cfg == nil || log == nil || !log.Flagged || log.UserID == nil || *log.UserID <= 0 {
 		return false
 	}
+	// Cyber-only mode never applies account sanctions for local keyword or
+	// moderation hits. A real upstream cyber_policy event bans on its first hit.
+	if cfg.AutoBanOnlyCyberPolicy && log.Action != ContentModerationActionCyberPolicy {
+		return false
+	}
 	count := 1
-	if s.repo != nil && cfg.ViolationWindowHours > 0 {
+	if !cfg.AutoBanOnlyCyberPolicy && s.repo != nil && cfg.ViolationWindowHours > 0 {
 		since := time.Now().Add(-time.Duration(cfg.ViolationWindowHours) * time.Hour)
 		if n, err := s.repo.CountFlaggedByUserSince(ctx, *log.UserID, since, cfg.CyberPolicyExcludeFromBanCount); err == nil {
 			count = n + 1
@@ -1981,7 +1992,7 @@ func (s *ContentModerationService) applyFlaggedAccountSideEffects(ctx context.Co
 	}
 	log.ViolationCount = count
 	autoBanJustApplied := false
-	if cfg.AutoBanEnabled && cfg.BanThreshold > 0 && count >= cfg.BanThreshold && s.userRepo != nil {
+	if cfg.AutoBanEnabled && (cfg.AutoBanOnlyCyberPolicy || (cfg.BanThreshold > 0 && count >= cfg.BanThreshold)) && s.userRepo != nil {
 		user, err := s.userRepo.GetByID(ctx, *log.UserID)
 		if err != nil {
 			slog.Warn("content_moderation.ban_get_user_failed", "user_id", *log.UserID, "error", err)
@@ -2493,6 +2504,7 @@ func (s *ContentModerationService) configView(cfg *ContentModerationConfig) *Con
 		BlockStatus:                    cfg.BlockStatus,
 		BlockMessage:                   cfg.BlockMessage,
 		EmailOnHit:                     cfg.EmailOnHit,
+		AutoBanOnlyCyberPolicy:         cfg.AutoBanOnlyCyberPolicy,
 		AutoBanEnabled:                 cfg.AutoBanEnabled,
 		BanThreshold:                   cfg.BanThreshold,
 		ViolationWindowHours:           cfg.ViolationWindowHours,

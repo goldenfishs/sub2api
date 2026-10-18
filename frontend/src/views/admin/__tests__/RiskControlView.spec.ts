@@ -337,6 +337,28 @@ describe('admin RiskControlView', () => {
     wrapper.unmount()
   })
 
+  it('loads and saves cyber-only auto-ban independently of the master switch', async () => {
+    getConfig.mockResolvedValue({ ...baseConfig(), auto_ban_only_cyber_policy: true })
+    const wrapper = mount(RiskControlView, {
+      global: { stubs: { AppLayout: AppLayoutStub, BaseDialog: BaseDialogStub,
+        Icon: true, Select: true, Toggle: true, Pagination: true,
+        ModelWhitelistSelector: ModelWhitelistSelectorStub, ProxySelector: true } },
+    })
+    await flushPromises()
+    await findButtonByText(wrapper, 'admin.riskControl.openSettings').trigger('click')
+    await findButtonByText(wrapper, 'admin.riskControl.tabs.response').trigger('click')
+    const toggle = wrapper.findComponent('[data-test="cyber-only-auto-ban"]')
+    expect(toggle.props('modelValue')).toBe(true)
+    toggle.vm.$emit('update:modelValue', false)
+    await findButtonByText(wrapper, 'admin.riskControl.saveConfig').trigger('click')
+    await flushPromises()
+    expect(updateConfig).toHaveBeenCalledWith(expect.objectContaining({
+      auto_ban_only_cyber_policy: false, auto_ban_enabled: true,
+    }))
+    expect(showError).not.toHaveBeenCalled()
+    wrapper.unmount()
+  })
+
   it('saves the selected model filter mode and models', async () => {
     const wrapper = mount(RiskControlView, {
       global: {

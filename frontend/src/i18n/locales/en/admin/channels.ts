@@ -368,6 +368,8 @@ export default {
       emailOnHitHint: 'When enabled, send a risk-control email on every hit; auto-ban notices are always sent.',
       autoBan: 'Auto Ban User',
       autoBanHint: 'Disable the user, invalidate auth cache, and send a ban notice after the hit threshold is reached.',
+      autoBanOnlyCyberPolicy: 'Auto-ban only on cyber_policy',
+      autoBanOnlyCyberPolicyHint: 'Keyword and other moderation hits only block the request and are logged. An upstream cyber_policy hit bans on the first occurrence, regardless of the count threshold. Requires auto-ban enabled and cyber exclusion disabled. Admin and risk allowlist exemptions remain in effect.',
       cyberPolicyExcludeBan: 'Exclude Cyber Policy Hits from Ban Count',
       cyberPolicyExcludeBanHint: 'When enabled, cyber_policy hits no longer count toward auto-ban violations: no ban judgment on the hit itself, and history rows are excluded from the rolling count. Logs and notice emails are unaffected.',
       violationNotCounted: 'Not counted',
