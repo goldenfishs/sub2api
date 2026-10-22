@@ -128,7 +128,7 @@ func TestAuditCyberResponseWebSocket(t *testing.T) {
 		if err != nil {
 			return
 		}
-		defer conn.CloseNow()
+		defer func() { _ = conn.CloseNow() }()
 		c, _ := gin.CreateTestContext(w)
 		c.Request = r
 		decision := runSecurityAudit(c, nil, nil, svc, nil, middleware.AuthSubject{UserID: 7}, service.ContentModerationProtocolOpenAIResponses, "gpt-test", []byte(`{"type":"response.create","input":"audit-test-marker"}`), "first_turn")
@@ -140,7 +140,7 @@ func TestAuditCyberResponseWebSocket(t *testing.T) {
 	defer cancel()
 	conn, _, err := coderws.Dial(ctx, "ws"+strings.TrimPrefix(server.URL, "http"), nil)
 	require.NoError(t, err)
-	defer conn.CloseNow()
+	defer func() { _ = conn.CloseNow() }()
 	_, created, err := conn.Read(ctx)
 	require.NoError(t, err)
 	require.Equal(t, "response.created", gjson.GetBytes(created, "type").String())

@@ -15,6 +15,12 @@ import (
 
 const auditCyberPolicyResponseKey = "sub2api.local_audit.cyber_response"
 
+type auditCyberPolicyEvent struct {
+	Type           string `json:"type"`
+	SequenceNumber int    `json:"sequence_number"`
+	Response       gin.H  `json:"response"`
+}
+
 func auditCyberPolicyEnabled(decision *securityaudit.Decision) bool {
 	return decision != nil && decision.Kind == securityaudit.DecisionBlock && !decision.AllowNextStage &&
 		decision.ClientResponse != nil && decision.ClientResponse.CyberPolicy
@@ -41,7 +47,7 @@ func writeAuditCyberPolicyHTTP(c *gin.Context, decision *securityaudit.Decision)
 		c.Header("X-Accel-Buffering", "no")
 		c.Status(http.StatusOK)
 		for _, event := range auditCyberPolicyEvents(decision) {
-			c.SSEvent(event["type"].(string), event)
+			c.SSEvent(event.Type, event)
 		}
 		c.Writer.Flush()
 		return true
@@ -53,7 +59,7 @@ func writeAuditCyberPolicyHTTP(c *gin.Context, decision *securityaudit.Decision)
 	return true
 }
 
-func auditCyberPolicyEvents(decision *securityaudit.Decision) []gin.H {
+func auditCyberPolicyEvents(decision *securityaudit.Decision) []auditCyberPolicyEvent {
 	id := "resp_local_audit_" + uuid.NewString()
 	createdAt := time.Now().Unix()
 	response := func(status string, policyError any) gin.H {
@@ -63,9 +69,9 @@ func auditCyberPolicyEvents(decision *securityaudit.Decision) []gin.H {
 			"output": []any{}, "error": policyError, "usage": nil,
 		}
 	}
-	return []gin.H{
-		{"type": "response.created", "sequence_number": 0, "response": response("in_progress", nil)},
-		{"type": "response.failed", "sequence_number": 1, "response": response("failed", gin.H{
+	return []auditCyberPolicyEvent{
+		{Type: "response.created", SequenceNumber: 0, Response: response("in_progress", nil)},
+		{Type: "response.failed", SequenceNumber: 1, Response: response("failed", gin.H{
 			"code": "cyber_policy", "message": securityAuditMessage(decision),
 		})},
 	}
