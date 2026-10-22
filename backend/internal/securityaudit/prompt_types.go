@@ -157,6 +157,9 @@ type LegacyDecision struct {
 }
 
 type Decision struct {
+	// ClientResponse changes only the downstream envelope, never the audit verdict
+	// or its source. Local blocks must not become upstream cyber-policy evidence.
+	ClientResponse *ClientResponse `json:"-"`
 	Kind           DecisionKind    `json:"kind"`
 	HTTPStatus     int             `json:"http_status"`
 	ErrorCode      string          `json:"error_code,omitempty"`
@@ -164,6 +167,13 @@ type Decision struct {
 	Legacy         *LegacyDecision `json:"legacy,omitempty"`
 	Prompt         *PromptDecision `json:"prompt,omitempty"`
 	AllowNextStage bool            `json:"allow_next_stage"`
+}
+
+type ClientResponse struct {
+	CyberPolicy bool
+	Protocol    string
+	Model       string
+	Stream      bool
 }
 
 type IssueSummary struct {

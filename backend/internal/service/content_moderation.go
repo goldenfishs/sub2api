@@ -161,6 +161,7 @@ type ContentModerationConfig struct {
 	QueueSize            int                          `json:"queue_size"`
 	BlockStatus          int                          `json:"block_status"`
 	BlockMessage         string                       `json:"block_message"`
+	BlockAsCyberPolicy   bool                         `json:"block_as_cyber_policy"` // Client format only; audit and ban decisions are unchanged.
 	EmailOnHit           bool                         `json:"email_on_hit"`
 	AutoBanEnabled       bool                         `json:"auto_ban_enabled"`
 	BanThreshold         int                          `json:"ban_threshold"`
@@ -202,6 +203,7 @@ type ContentModerationConfigView struct {
 	QueueSize                      int                                     `json:"queue_size"`
 	BlockStatus                    int                                     `json:"block_status"`
 	BlockMessage                   string                                  `json:"block_message"`
+	BlockAsCyberPolicy             bool                                    `json:"block_as_cyber_policy"`
 	EmailOnHit                     bool                                    `json:"email_on_hit"`
 	AutoBanEnabled                 bool                                    `json:"auto_ban_enabled"`
 	BanThreshold                   int                                     `json:"ban_threshold"`
@@ -300,6 +302,7 @@ type UpdateContentModerationConfigInput struct {
 	QueueSize                      *int                          `json:"queue_size"`
 	BlockStatus                    *int                          `json:"block_status"`
 	BlockMessage                   *string                       `json:"block_message"`
+	BlockAsCyberPolicy             *bool                         `json:"block_as_cyber_policy"`
 	EmailOnHit                     *bool                         `json:"email_on_hit"`
 	AutoBanEnabled                 *bool                         `json:"auto_ban_enabled"`
 	BanThreshold                   *int                          `json:"ban_threshold"`
@@ -628,6 +631,13 @@ func (s *ContentModerationService) GetConfig(ctx context.Context) (*ContentModer
 	return s.engineConfigView(cfg), nil
 }
 
+// BlockAsCyberPolicy reports whether local audit blocks use the cyber_policy client format.
+// It shares the audit runtime cache and retains the legacy response if configuration is unavailable.
+func (s *ContentModerationService) BlockAsCyberPolicy(ctx context.Context) bool {
+	snapshot, err := s.loadRuntimeSnapshot(ctx)
+	return err == nil && snapshot != nil && snapshot.config != nil && snapshot.config.BlockAsCyberPolicy
+}
+
 func (s *ContentModerationService) UpdateConfig(ctx context.Context, input UpdateContentModerationConfigInput) (*ContentModerationConfigView, error) {
 	cfg, err := s.loadConfig(ctx)
 	if err != nil {
@@ -659,6 +669,9 @@ func (s *ContentModerationService) UpdateConfig(ctx context.Context, input Updat
 	}
 	if input.BlockMessage != nil {
 		cfg.BlockMessage = strings.TrimSpace(*input.BlockMessage)
+	}
+	if input.BlockAsCyberPolicy != nil {
+		cfg.BlockAsCyberPolicy = *input.BlockAsCyberPolicy
 	}
 	if input.EmailOnHit != nil {
 		cfg.EmailOnHit = *input.EmailOnHit
@@ -2163,6 +2176,7 @@ func defaultContentModerationConfig() *ContentModerationConfig {
 		QueueSize:            defaultContentModerationQueueSize,
 		BlockStatus:          defaultContentModerationBlockHTTPStatus,
 		BlockMessage:         defaultContentModerationBlockMessage,
+		BlockAsCyberPolicy:   false,
 		EmailOnHit:           true,
 		AutoBanEnabled:       true,
 		BanThreshold:         defaultContentModerationBanThreshold,
@@ -2503,6 +2517,7 @@ func (s *ContentModerationService) configView(cfg *ContentModerationConfig) *Con
 		QueueSize:                      cfg.QueueSize,
 		BlockStatus:                    cfg.BlockStatus,
 		BlockMessage:                   cfg.BlockMessage,
+		BlockAsCyberPolicy:             cfg.BlockAsCyberPolicy,
 		EmailOnHit:                     cfg.EmailOnHit,
 		AutoBanOnlyCyberPolicy:         cfg.AutoBanOnlyCyberPolicy,
 		AutoBanEnabled:                 cfg.AutoBanEnabled,

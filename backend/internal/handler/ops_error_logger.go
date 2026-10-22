@@ -1108,6 +1108,12 @@ func OpsErrorLoggerMiddleware(ops *service.OpsService) gin.HandlerFunc {
 		if shouldSkipOpsErrorLogForCyber(c) {
 			return
 		}
+		// A locally synthesized response.failed uses the OpenAI wire format but
+		// is not an upstream failure. Preserve the explicit request-scoped mark.
+		if c.GetBool(auditCyberPolicyResponseKey) && len(service.GetOpsStreamErrors(c)) > 0 {
+			logOpsStreamError(c, ops, c.Writer.Status())
+			return
+		}
 
 		status := c.Writer.Status()
 		body := w.capturedBytes()
@@ -1185,7 +1191,7 @@ func OpsErrorLoggerMiddleware(ops *service.OpsService) gin.HandlerFunc {
 
 		// Google 格式错误体没有 type 字段：按网关回写时登记的错误类型补齐。
 		if errType, code := service.OpsLocalErrorType(c); errType != "" && !parsed.StreamFailure &&
-			(parsed.ErrorType == "" || parsed.ErrorType == "api_error") {
+			(parsed.ErrorType == "" || parsed.ErrorType == "api_error" || c.GetBool(auditCyberPolicyResponseKey)) {
 			parsed.ErrorType = errType
 			if code != "" {
 				parsed.Code = code

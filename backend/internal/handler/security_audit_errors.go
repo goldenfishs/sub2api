@@ -18,6 +18,9 @@ func (h *OpenAIGatewayHandler) openAISecurityAuditError(c *gin.Context, decision
 	if decision == nil {
 		return
 	}
+	if writeAuditCyberPolicyHTTP(c, decision) {
+		return
+	}
 	if decision.Legacy != nil && decision.Legacy.Blocked {
 		h.errorResponse(c, securityAuditStatus(decision), securityAuditErrorCode(decision), securityAuditMessage(decision))
 		return
@@ -35,6 +38,9 @@ func (h *GatewayHandler) openAISecurityAuditError(c *gin.Context, decision *secu
 	if decision == nil {
 		return
 	}
+	if writeAuditCyberPolicyHTTP(c, decision) {
+		return
+	}
 	if decision.Legacy != nil && decision.Legacy.Blocked {
 		h.chatCompletionsErrorResponse(c, securityAuditStatus(decision), securityAuditErrorCode(decision), securityAuditMessage(decision))
 		return
@@ -50,6 +56,9 @@ func (h *GatewayHandler) openAISecurityAuditError(c *gin.Context, decision *secu
 
 func (h *GatewayHandler) responsesSecurityAuditError(c *gin.Context, decision *securityaudit.Decision) {
 	if decision == nil {
+		return
+	}
+	if writeAuditCyberPolicyHTTP(c, decision) {
 		return
 	}
 	if decision.Legacy != nil && decision.Legacy.Blocked {
@@ -131,6 +140,10 @@ func writeSecurityAuditWSError(ctx context.Context, conn *coderws.Conn, decision
 	if conn == nil || decision == nil {
 		return
 	}
+	if auditCyberPolicyEnabled(decision) {
+		writeAuditCyberPolicyWS(ctx, conn, decision)
+		return
+	}
 	if decision.Legacy != nil && decision.Legacy.Blocked {
 		legacy := decision.Legacy
 		writeContentModerationWSError(ctx, conn, (legacyContentModerationDecision{legacy}).toService())
@@ -176,6 +189,9 @@ func securityAuditWSCloseStatus(decision *securityaudit.Decision) coderws.Status
 func securityAuditWSCloseReason(decision *securityaudit.Decision) string {
 	if decision == nil {
 		return securityaudit.ErrorCodeUnavailable
+	}
+	if auditCyberPolicyEnabled(decision) {
+		return "cyber_policy"
 	}
 	if decision.Legacy != nil && decision.Legacy.Blocked {
 		message := strings.TrimSpace(decision.Legacy.Message)
