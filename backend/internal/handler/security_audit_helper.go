@@ -9,6 +9,7 @@ import (
 	middleware2 "github.com/Wei-Shaw/sub2api/internal/server/middleware"
 	"github.com/Wei-Shaw/sub2api/internal/service"
 	"github.com/gin-gonic/gin"
+	"github.com/tidwall/gjson"
 	"go.uber.org/zap"
 )
 
@@ -65,10 +66,24 @@ func (h *OpenAIGatewayHandler) checkSecurityAuditStage(c *gin.Context, reqLog *z
 	return runSecurityAudit(c, reqLog, h.securityAuditCoordinator, h.contentModerationService, apiKey, subject, protocol, model, body, stage)
 }
 
-func runSecurityAudit(c *gin.Context, reqLog *zap.Logger, coordinator *securityaudit.Coordinator, legacy *service.ContentModerationService, apiKey *service.APIKey, subject middleware2.AuthSubject, protocol, model string, body []byte, stage string) *securityaudit.Decision {
+func runSecurityAudit(c *gin.Context, reqLog *zap.Logger, coordinator *securityaudit.Coordinator, legacy *service.ContentModerationService, apiKey *service.APIKey, subject middleware2.AuthSubject, protocol, model string, body []byte, stage string) (result *securityaudit.Decision) {
 	if c == nil || c.Request == nil {
 		return nil
 	}
+	defer func() {
+		if result == nil || result.Kind != securityaudit.DecisionBlock || result.AllowNextStage || legacy == nil {
+			return
+		}
+		switch protocol {
+		case service.ContentModerationProtocolOpenAIResponses, service.ContentModerationProtocolOpenAIChat, service.ContentModerationProtocolOpenAIImages:
+			if legacy.BlockAsCyberPolicy(c.Request.Context()) {
+				result.ClientResponse = &securityaudit.ClientResponse{
+					CyberPolicy: true, Protocol: protocol, Model: clientRequestedModel(c, model),
+					Stream: isSecurityAuditWebSocketStage(stage) || gjson.GetBytes(body, "stream").Bool(),
+				}
+			}
+		}
+	}()
 	cacheCompletion := cachesSecurityAuditCompletion(stage)
 	if cacheCompletion {
 		if completed, exists := c.Get(securityAuditCompletedContextKey); exists && completed == true {

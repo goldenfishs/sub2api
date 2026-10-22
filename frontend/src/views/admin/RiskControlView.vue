@@ -885,9 +885,26 @@
 
           <div v-else-if="activeSettingsTab === 'response'" class="space-y-5">
             <div class="grid grid-cols-1 gap-5 lg:grid-cols-2">
+              <div class="flex items-center justify-between gap-4 rounded-xl border border-gray-200 p-4 dark:border-dark-600 lg:col-span-2">
+                <div>
+                  <p class="text-sm font-medium text-gray-900 dark:text-white">{{ t('admin.riskControl.blockAsCyberPolicy') }}</p>
+                  <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">{{ t('admin.riskControl.blockAsCyberPolicyHint') }}</p>
+                </div>
+                <Toggle v-model="configForm.block_as_cyber_policy" data-test="block-as-cyber-policy" />
+              </div>
               <div>
                 <label class="input-label">{{ t('admin.riskControl.blockStatus') }}</label>
-                <input v-model.number="configForm.block_status" type="number" min="400" max="599" class="input" />
+                <input
+                  v-model.number="configForm.block_status"
+                  type="number"
+                  min="400"
+                  max="599"
+                  class="input disabled:cursor-not-allowed disabled:opacity-50"
+                  :disabled="configForm.block_as_cyber_policy"
+                  :aria-describedby="configForm.block_as_cyber_policy ? 'block-status-cyber-policy-hint' : undefined"
+                  data-test="block-status"
+                />
+                <p v-if="configForm.block_as_cyber_policy" id="block-status-cyber-policy-hint" class="mt-1 text-xs text-gray-500 dark:text-gray-400">{{ t('admin.riskControl.blockStatusCyberPolicyHint') }}</p>
               </div>
               <div>
                 <label class="input-label">{{ t('admin.riskControl.blockMessage') }}</label>
@@ -1287,6 +1304,7 @@ const configForm = reactive({
   worker_count: 4,
   queue_size: 32768,
   block_status: 403,
+  block_as_cyber_policy: false,
   block_message: defaultBlockMessage(),
   email_on_hit: true,
   auto_ban_only_cyber_policy: false,
@@ -1815,6 +1833,7 @@ function applyConfig(config: ContentModerationConfig) {
   configForm.worker_count = config.worker_count || 4
   configForm.queue_size = config.queue_size || 32768
   configForm.block_status = config.block_status || 403
+  configForm.block_as_cyber_policy = config.block_as_cyber_policy ?? false
   configForm.block_message = config.block_message || defaultBlockMessage()
   configForm.email_on_hit = config.email_on_hit ?? true
   configForm.auto_ban_only_cyber_policy = config.auto_ban_only_cyber_policy ?? false
@@ -1910,6 +1929,7 @@ async function saveConfig() {
       worker_count: Number(configForm.worker_count) || 4,
       queue_size: Number(configForm.queue_size) || 32768,
       block_status: Number(configForm.block_status) || 403,
+      block_as_cyber_policy: configForm.block_as_cyber_policy,
       block_message: configForm.block_message || defaultBlockMessage(),
       email_on_hit: configForm.email_on_hit,
       auto_ban_only_cyber_policy: configForm.auto_ban_only_cyber_policy,

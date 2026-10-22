@@ -337,6 +337,44 @@ describe('admin RiskControlView', () => {
     wrapper.unmount()
   })
 
+  it.each([undefined, false, true])('loads cyber_policy response mode %s and saves a change without altering ban rules or the saved status', async (enabled) => {
+    getConfig.mockResolvedValue({
+      ...baseConfig(), block_as_cyber_policy: enabled, block_status: 451,
+      auto_ban_only_cyber_policy: true, cyber_policy_exclude_from_ban_count: false,
+    })
+    const wrapper = mount(RiskControlView, {
+      global: { stubs: { AppLayout: AppLayoutStub, BaseDialog: BaseDialogStub,
+        Icon: true, Select: true, Toggle: true, Pagination: true,
+        ModelWhitelistSelector: ModelWhitelistSelectorStub, ProxySelector: true } },
+    })
+    await flushPromises()
+    await findButtonByText(wrapper, 'admin.riskControl.openSettings').trigger('click')
+    await findButtonByText(wrapper, 'admin.riskControl.tabs.response').trigger('click')
+    const toggle = wrapper.findComponent('[data-test="block-as-cyber-policy"]')
+    const statusInput = wrapper.get<HTMLInputElement>('[data-test="block-status"]')
+    expect(toggle.props('modelValue')).toBe(enabled ?? false)
+    expect(statusInput.element.disabled).toBe(enabled ?? false)
+    expect(statusInput.element.value).toBe('451')
+
+    toggle.vm.$emit('update:modelValue', !enabled)
+    await flushPromises()
+    expect(statusInput.element.disabled).toBe(!enabled)
+    expect(statusInput.element.value).toBe('451')
+    await findButtonByText(wrapper, 'admin.riskControl.saveConfig').trigger('click')
+    await flushPromises()
+    expect(updateConfig).toHaveBeenCalledWith(expect.objectContaining({
+      block_as_cyber_policy: !enabled, block_status: 451,
+      auto_ban_only_cyber_policy: true, auto_ban_enabled: true,
+      cyber_policy_exclude_from_ban_count: false,
+    }))
+    await findButtonByText(wrapper, 'admin.riskControl.openSettings').trigger('click')
+    await findButtonByText(wrapper, 'admin.riskControl.tabs.response').trigger('click')
+    expect(wrapper.findComponent('[data-test="block-as-cyber-policy"]').props('modelValue')).toBe(!enabled)
+    expect(wrapper.get<HTMLInputElement>('[data-test="block-status"]').element.value).toBe('451')
+    expect(showError).not.toHaveBeenCalled()
+    wrapper.unmount()
+  })
+
   it('loads and saves cyber-only auto-ban independently of the master switch', async () => {
     getConfig.mockResolvedValue({ ...baseConfig(), auto_ban_only_cyber_policy: true })
     const wrapper = mount(RiskControlView, {

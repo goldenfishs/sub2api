@@ -38,6 +38,7 @@ export interface ContentModerationConfig {
   worker_count: number
   queue_size: number
   block_status: number
+  block_as_cyber_policy?: boolean
   block_message: string
   email_on_hit: boolean
   auto_ban_only_cyber_policy?: boolean
@@ -124,6 +125,7 @@ export interface UpdateContentModerationConfig {
   worker_count?: number
   queue_size?: number
   block_status?: number
+  block_as_cyber_policy?: boolean
   block_message?: string
   email_on_hit?: boolean
   auto_ban_only_cyber_policy?: boolean
