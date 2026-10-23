@@ -12,6 +12,10 @@
             <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">{{ t('admin.riskControl.description') }}</p>
           </div>
           <div class="flex flex-wrap items-center gap-2">
+            <button type="button" class="btn btn-secondary inline-flex items-center gap-2" @click="sessionsOpen = true">
+              <Icon name="shield" size="sm" />
+              {{ t('admin.riskControl.sessions.title') }}
+            </button>
             <button type="button" class="btn btn-secondary inline-flex items-center gap-2" :disabled="statusLoading" @click="loadStatus(false)">
               <Icon name="refresh" size="sm" :class="statusLoading ? 'animate-spin' : ''" />
               {{ t('admin.riskControl.refreshStatus') }}
@@ -378,6 +382,8 @@
           />
         </div>
       </template>
+
+      <RiskSessionDialog :show="sessionsOpen" @close="sessionsOpen = false" />
 
       <BaseDialog :show="settingsOpen" :title="t('admin.riskControl.settingsTitle')" width="extra-wide" @close="settingsOpen = false">
         <div class="space-y-6">
@@ -1181,6 +1187,7 @@ import Toggle from '@/components/common/Toggle.vue'
 import Pagination from '@/components/common/Pagination.vue'
 import ModelWhitelistSelector from '@/components/account/ModelWhitelistSelector.vue'
 import ProxySelector from '@/components/common/ProxySelector.vue'
+import RiskSessionDialog from '@/components/admin/RiskSessionDialog.vue'
 import { adminAPI } from '@/api/admin'
 import type {
   ContentModerationAPIKeyLoad,
@@ -1201,6 +1208,8 @@ import type { AdminGroup, Proxy, SelectOption } from '@/types'
 import { useAppStore } from '@/stores/app'
 import { extractApiErrorMessage } from '@/utils/apiError'
 import { formatDateTime as formatDateTimeValue } from '@/utils/format'
+
+const sessionsOpen = ref(false)
 
 type SettingsTab = 'basic' | 'scope' | 'runtime' | 'response' | 'riskThresholds' | 'retention' | 'keywords'
 type WorkerSlotState = 'active' | 'idle' | 'disabled'

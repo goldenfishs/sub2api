@@ -545,6 +545,8 @@ func (s *OpenAIGatewayService) handleStreamingResponseWithReasoning(ctx context.
 						Code:           code,
 						Message:        msg,
 						Body:           truncateString(string(dataBytes), 4096),
+						RawBody:        dataBytes,
+						RawBodyScope:   "upstream_error_event",
 						UpstreamStatus: http.StatusOK,
 						UpstreamInTok:  usage.InputTokens,
 						UpstreamOutTok: usage.OutputTokens,

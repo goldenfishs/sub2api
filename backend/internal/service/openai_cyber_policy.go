@@ -1,6 +1,7 @@
 package service
 
 import (
+	"bytes"
 	"errors"
 	"strings"
 
@@ -27,6 +28,11 @@ type CyberPolicyMark struct {
 	UpstreamStatus int    // 上游 HTTP 状态（流式=200，非流式=400）
 	UpstreamInTok  int    // 上游已报 input tokens（如有）
 	UpstreamOutTok int    // 上游已报 output tokens（如有）
+	// RawBody is transient evidence for encrypted incident storage only. Body
+	// remains the bounded legacy log summary; never serialize RawBody to logs.
+	RawBody      []byte `json:"-"`
+	RawBodyScope string `json:"-"`
+	RawBodyBytes int64  `json:"-"`
 }
 
 // MarkOpsCyberPolicy 记录 cyber 标记；首个写入生效，后续忽略（同一 turn 只记一次）。
@@ -41,6 +47,14 @@ func MarkOpsCyberPolicy(c *gin.Context, mark CyberPolicyMark) {
 	mark.Code = "cyber_policy"
 	mark.Message = strings.TrimSpace(mark.Message)
 	mark.Body = strings.TrimSpace(mark.Body)
+	mark.RawBodyBytes = int64(len(mark.RawBody))
+	if len(mark.RawBody) > RiskSessionSnapshotMaxBytes {
+		mark.RawBody = nil
+		mark.RawBodyScope += "_oversize_unavailable"
+	} else {
+		// SSE scanner buffers may be reused after the current event.
+		mark.RawBody = bytes.Clone(mark.RawBody)
+	}
 	c.Set(opsCyberPolicyKey, &mark)
 }
 
@@ -97,6 +111,11 @@ func markOpenAICyberPolicyEvent(c *gin.Context, payload []byte, upstreamStatus i
 		Message:        message,
 		Body:           truncateString(string(payload), 4096),
 		UpstreamStatus: upstreamStatus,
+		RawBody:        payload,
+		RawBodyScope:   "upstream_error_event",
+	}
+	if upstreamStatus >= 400 {
+		mark.RawBodyScope = "upstream_error_body_bounded"
 	}
 	if usage != nil {
 		mark.UpstreamInTok = usage.InputTokens

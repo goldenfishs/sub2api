@@ -517,6 +517,7 @@ type ContentModerationHashCache interface {
 }
 
 type ContentModerationService struct {
+	riskSessions             atomic.Pointer[RiskSessionService]
 	settingRepo              SettingRepository
 	repo                     ContentModerationRepository
 	hashCache                ContentModerationHashCache
@@ -1516,6 +1517,11 @@ func (s *ContentModerationService) runCleanupOnce() {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), contentModerationCleanupTimeout)
 	defer cancel()
+	if risk := s.RiskSessions(); risk != nil {
+		if err := risk.CleanupExpired(ctx); err != nil {
+			slog.Warn("risk_session.cleanup_failed", "error", err)
+		}
+	}
 	cfg, err := s.loadConfig(ctx)
 	if err != nil {
 		slog.Warn("content_moderation.cleanup_load_config_failed", "error", err)

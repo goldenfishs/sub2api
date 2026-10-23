@@ -4420,7 +4420,11 @@ func (h *OpenAIGatewayHandler) recordCyberPolicyIfMarked(c *gin.Context, apiKey 
 		CreatedAt:       time.Now(),
 	}
 	cyberLogOnly := h.cyberPolicyLogOnly(c, apiKey)
-	if gwSvc != nil && apiKey != nil && !cyberLogOnly {
+	durableCaptured := false
+	if !cyberLogOnly {
+		durableCaptured = h.captureUpstreamRiskSession(c, apiKey, model, cyberBlockBody, mark)
+	}
+	if gwSvc != nil && apiKey != nil && !cyberLogOnly && !durableCaptured {
 		plan := buildCyberSessionBlockWritePlan(apiKey.ID, c, cyberBlockBody)
 		if len(plan.keys) > 0 {
 			blockCtx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)

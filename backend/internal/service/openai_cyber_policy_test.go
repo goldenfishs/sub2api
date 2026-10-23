@@ -1,12 +1,57 @@
 package service
 
 import (
+	"bytes"
+	"encoding/json"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/require"
 )
+
+func TestCyberPolicyRawEvidencePreservesFullEventAndTurnBoundary(t *testing.T) {
+	c, _ := gin.CreateTestContext(httptest.NewRecorder())
+	payload, err := json.Marshal(map[string]any{
+		"type":     "response.failed",
+		"response": map[string]any{"error": map[string]any{"code": "cyber_policy", "message": "refused"}, "evidence": strings.Repeat("x", 12*1024)},
+	})
+	require.NoError(t, err)
+	expected := bytes.Clone(payload)
+	require.True(t, markOpenAICyberPolicyEvent(c, payload, 200, nil))
+	mark := GetOpsCyberPolicy(c)
+	require.Equal(t, expected, mark.RawBody)
+	require.EqualValues(t, len(expected), mark.RawBodyBytes)
+	require.Equal(t, "upstream_error_event", mark.RawBodyScope)
+	require.Len(t, mark.Body, 4096, "legacy logging remains bounded")
+	// The SSE/WS decoder can recycle its input storage without corrupting evidence.
+	copy(payload, []byte("corrupted"))
+	require.Equal(t, expected, mark.RawBody)
+	MarkOpsCyberPolicy(c, CyberPolicyMark{RawBody: []byte("other event"), RawBodyScope: "upstream_error_event"})
+	require.Equal(t, expected, GetOpsCyberPolicy(c).RawBody, "first hit owns the turn")
+	serialized, err := json.Marshal(mark)
+	require.NoError(t, err)
+	require.NotContains(t, string(serialized), "RawBody")
+	require.NotContains(t, string(serialized), strings.Repeat("x", 5000))
+	ClearOpsCyberPolicy(c)
+	require.Nil(t, GetOpsCyberPolicy(c))
+	next := []byte(`{"error":{"code":"cyber_policy","message":"next turn"}}`)
+	require.True(t, markOpenAICyberPolicyEvent(c, next, 400, nil))
+	require.Equal(t, next, GetOpsCyberPolicy(c).RawBody)
+	require.Equal(t, "upstream_error_body_bounded", GetOpsCyberPolicy(c).RawBodyScope)
+}
+
+func TestCyberPolicyRawEvidenceOversizeIsUnavailableNotTruncated(t *testing.T) {
+	c, _ := gin.CreateTestContext(httptest.NewRecorder())
+	body := bytes.Repeat([]byte("x"), RiskSessionSnapshotMaxBytes+1)
+	MarkOpsCyberPolicy(c, CyberPolicyMark{Body: "legacy summary", RawBody: body, RawBodyScope: "upstream_error_event"})
+	mark := GetOpsCyberPolicy(c)
+	require.Nil(t, mark.RawBody)
+	require.EqualValues(t, len(body), mark.RawBodyBytes)
+	require.Equal(t, "upstream_error_event_oversize_unavailable", mark.RawBodyScope)
+	require.Equal(t, "legacy summary", mark.Body)
+}
 
 func TestMarkAndGetOpsCyberPolicy(t *testing.T) {
 	gin.SetMode(gin.TestMode)

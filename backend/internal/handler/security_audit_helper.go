@@ -74,6 +74,9 @@ func runSecurityAudit(c *gin.Context, reqLog *zap.Logger, coordinator *securitya
 		if result == nil || result.Kind != securityaudit.DecisionBlock || result.AllowNextStage || legacy == nil {
 			return
 		}
+		if result.ErrorCode != riskSessionBlockedCode {
+			captureLocalRiskSession(c, reqLog, legacy, apiKey, subject, protocol, model, body, stage, result)
+		}
 		switch protocol {
 		case service.ContentModerationProtocolOpenAIResponses, service.ContentModerationProtocolOpenAIChat, service.ContentModerationProtocolOpenAIImages:
 			if legacy.BlockAsCyberPolicy(c.Request.Context()) {
@@ -89,6 +92,9 @@ func runSecurityAudit(c *gin.Context, reqLog *zap.Logger, coordinator *securitya
 		if completed, exists := c.Get(securityAuditCompletedContextKey); exists && completed == true {
 			return nil
 		}
+	}
+	if decision := checkPermanentRiskSession(c, reqLog, legacy, apiKey, subject, protocol, model, body, stage); decision != nil {
+		return decision
 	}
 	if coordinator == nil {
 		legacyDecision := runContentModeration(c, reqLog, legacy, apiKey, subject, protocol, model, body)
