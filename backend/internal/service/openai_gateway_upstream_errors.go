@@ -534,6 +534,8 @@ func (s *OpenAIGatewayService) handleErrorResponse(
 			Code:           code,
 			Message:        cyberMsg,
 			Body:           truncateString(string(body), 4096),
+			RawBody:        body,
+			RawBodyScope:   "upstream_error_body_bounded",
 			UpstreamStatus: resp.StatusCode,
 		})
 		setOpsUpstreamError(c, resp.StatusCode, cyberMsg, truncateString(string(body), 2048))
@@ -786,6 +788,8 @@ func (s *OpenAIGatewayService) handleCompatErrorResponse(
 			Code:           code,
 			Message:        cyberMsg,
 			Body:           truncateString(string(body), 4096),
+			RawBody:        body,
+			RawBodyScope:   "upstream_error_body_bounded",
 			UpstreamStatus: resp.StatusCode,
 		})
 		setOpsUpstreamError(c, resp.StatusCode, cyberMsg, truncateString(string(body), 2048))

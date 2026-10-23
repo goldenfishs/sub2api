@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"compress/gzip"
 	"compress/zlib"
+	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -63,7 +64,14 @@ func (p *PrereadBody) Bytes() []byte {
 // client used to compress the body (zstd, gzip, deflate).
 // 已由 PrereadBody 回填的请求体直接返回其完整切片（零拷贝），不检查内部
 // reader 是否已被消费——见 PrereadBody 的文档说明。
-func ReadRequestBodyWithPrealloc(req *http.Request) ([]byte, error) {
+func ReadRequestBodyWithPrealloc(req *http.Request) (body []byte, readErr error) {
+	defer func() {
+		if req != nil && readErr == nil && len(body) > 0 && OriginalRequestBody(req) == nil {
+			// Retain the first decoded request bytes, before protocol/model rewrites.
+			// This is a request-lifetime reference, not persistent request logging.
+			*req = *req.WithContext(context.WithValue(req.Context(), originalRequestBodyContextKey{}, body))
+		}
+	}()
 	if req == nil || req.Body == nil {
 		return nil, nil
 	}
@@ -103,6 +111,18 @@ func ReadRequestBodyWithPrealloc(req *http.Request) ([]byte, error) {
 	req.ContentLength = int64(len(decoded))
 
 	return decoded, nil
+}
+
+type originalRequestBodyContextKey struct{}
+
+// OriginalRequestBody returns the first successfully read decoded body. Callers
+// must treat it as immutable; nil means the request used a different reader.
+func OriginalRequestBody(req *http.Request) []byte {
+	if req == nil {
+		return nil
+	}
+	body, _ := req.Context().Value(originalRequestBodyContextKey{}).([]byte)
+	return body
 }
 
 // Read bounded chunks as bytes arrive, then assemble the exact-size result.

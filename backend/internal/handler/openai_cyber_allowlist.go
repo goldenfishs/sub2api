@@ -11,7 +11,7 @@ func (h *OpenAIGatewayHandler) cyberPolicyLogOnly(c *gin.Context, apiKey *servic
 
 // Both HTTP and WebSocket admission skip existing blocks for trusted users.
 func (h *OpenAIGatewayHandler) findBlockedCyberSessionForAPIKey(c *gin.Context, apiKey *service.APIKey, body []byte) string {
-	if apiKey == nil || h.cyberPolicyLogOnly(c, apiKey) {
+	if apiKey == nil || h.cyberPolicyLogOnly(c, apiKey) || c.GetBool(riskSessionReleasedKey) {
 		return ""
 	}
 	return findBlockedCyberSessionKey(c.Request.Context(), h.gatewayService, apiKey.ID, c, body)

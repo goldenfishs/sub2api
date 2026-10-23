@@ -951,6 +951,8 @@ func (s *OpenAIGatewayService) handleErrorResponsePassthrough(
 			Code:           cyberCode,
 			Message:        cyberMsg,
 			Body:           truncateString(string(body), 4096),
+			RawBody:        body,
+			RawBodyScope:   "upstream_error_body_bounded",
 			UpstreamStatus: resp.StatusCode,
 		})
 	}
@@ -2088,6 +2090,8 @@ func (s *OpenAIGatewayService) handleStreamingResponsePassthrough(
 						Code:           code,
 						Message:        msg,
 						Body:           truncateString(string(dataBytes), 4096),
+						RawBody:        dataBytes,
+						RawBodyScope:   "upstream_error_event",
 						UpstreamStatus: http.StatusOK,
 						UpstreamInTok:  usage.InputTokens,
 						UpstreamOutTok: usage.OutputTokens,
