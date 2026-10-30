@@ -33,6 +33,7 @@ const localizedMessages: Record<'en' | 'zh', Record<string, string>> = {
 }
 
 const messages: Record<string, string> = {
+  'usage.outputTps': 'Output TPS',
   'admin.usage.userDeletedBadge': 'Deleted',
   'usage.costDetails': 'Cost Breakdown',
   'admin.usage.inputCost': 'Input Cost',
@@ -72,8 +73,6 @@ const messages: Record<string, string> = {
   'usage.stream': 'Stream',
   'usage.sync': 'Sync',
   'usage.nativeCompactionV2': 'Compaction',
-  'usage.averageTps': 'Avg TPS',
-  'usage.averageTpsHint': 'Output tokens divided by total duration minus first-token latency.',
   'admin.usage.billingModeToken': 'Token',
   'admin.usage.billingModePerRequest': 'Per request',
   'admin.usage.billingModeImage': 'Image',
@@ -145,32 +144,21 @@ const baseImageRow = {
   image_size_breakdown: null,
 }
 
-describe('UsageTable average output speed', () => {
-  it.each([true, false])('uses the same TPS excluding first-token latency with account billing shown: %s', (showAccountBilling) => {
+describe('admin UsageTable tooltip', () => {
+  it('shows output TPS in the latency cell using total duration', () => {
+    const row = { ...baseImageRow, image_count: 0, billing_mode: 'token', output_tokens: 1000, duration_ms: 20_000, first_token_ms: 10_000 }
     const wrapper = mount(UsageTable, {
       props: {
-        data: [
-          { ...baseImageRow, billing_mode: 'token', request_id: 'stream', output_tokens: 230, duration_ms: 31270, first_token_ms: 17270, stream: true },
-          { ...baseImageRow, billing_mode: 'token', request_id: 'sync', output_tokens: 230, duration_ms: 31270, first_token_ms: null, stream: false },
-          { ...baseImageRow, request_id: 'missing', output_tokens: null, duration_ms: 31270 },
-          { ...baseImageRow, request_id: 'zero-duration', output_tokens: 230, duration_ms: 0 },
-        ],
+        data: [row, { ...row, request_id: 'no-duration', duration_ms: null }, { ...row, request_id: 'image', image_count: 1 }],
+        loading: false,
         columns: [{ key: 'latency', label: 'Latency' }],
-        showAccountBilling,
       },
-      global: {
-        stubs: { DataTable: DataTableStub, EmptyState: true, Icon: true, Teleport: true },
-      },
+      global: { stubs: { DataTable: DataTableStub, EmptyState: true, Icon: true, Teleport: true } },
     })
-
-    expect(wrapper.findAll('[data-testid="usage-average-tps"]').map((cell) => cell.text())).toEqual([
-      '16.4 tokens/s', '-', '-', '-',
-    ])
-    expect(wrapper.get('[data-testid="usage-average-tps"]').attributes('title')).toContain('minus first-token latency')
+    expect(wrapper.findAll('[data-testid="output-tps"]').map(cell => cell.text())).toEqual(['50.0 tok/s', '—', '—'])
+    expect(wrapper.text()).toContain('Output TPS')
   })
-})
 
-describe('admin UsageTable tooltip', () => {
   beforeEach(() => {
     locale = 'en'
     vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue({

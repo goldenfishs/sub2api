@@ -400,8 +400,6 @@ export default {
     latency: '延迟',
     latencyFirstToken: '首字',
     latencyDuration: '总耗时',
-    averageTps: '平均 TPS',
-    averageTpsHint: '平均输出速度 = 输出 Token ÷（总耗时 − 首字耗时），时间单位为秒。缺少首字耗时或生成用时无效时显示「-」。',
     time: '时间',
     ws: 'WS',
     stream: '流式',
